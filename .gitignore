@@ -1,0 +1,8 @@
+# local environment and caches
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+~$*
+# Excel lock files
+.~lock.*

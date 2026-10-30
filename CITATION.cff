@@ -1,0 +1,61 @@
+cff-version: 1.2.0
+message: "If you use this software or its outputs, please cite the article and this repository."
+title: "Mo–W systematics of subduction-zone fluids: forward models (interactive supplement)"
+type: software
+version: 1.0.0
+date-released: 2026-10-30
+license: CC-BY-4.0
+repository-code: "https://github.com/<github-user>/<repository>"
+authors:
+  - family-names: "<Family name>"
+    given-names: "<Given name>"
+    orcid: "https://orcid.org/0000-0000-0000-0000"
+    affiliation: "<Institution>"
+keywords:
+  - molybdenum
+  - tungsten
+  - subduction zone fluids
+  - oxygen fugacity
+  - Bali et al. 2012
+  - Rayleigh fractionation
+  - molybdenum isotopes
+preferred-citation:
+  type: article
+  title: "<Article title>"
+  journal: "Geochimica et Cosmochimica Acta"
+  year: 2026
+  authors:
+    - family-names: "<Family name>"
+      given-names: "<Given name>"
+  doi: "<article DOI when available>"
+references:
+  - type: article
+    title: "Molybdenum and tungsten solubility in aqueous fluids at high pressure and temperature and implications for arc magmatism"
+    authors:
+      - family-names: Bali
+        given-names: Enikő
+      - family-names: Keppler
+        given-names: Hans
+      - family-names: Audétat
+        given-names: Andreas
+    journal: "Earth and Planetary Science Letters"
+    year: 2012
+    volume: 351–352
+    start: 195
+    end: 207
+    doi: 10.1016/j.epsl.2012.07.032
+  - type: article
+    title: "The mobility of U and Th in subduction zone fluids: an indicator of oxygen fugacity and fluid salinity"
+    authors:
+      - family-names: Bali
+        given-names: Enikő
+      - family-names: Audétat
+        given-names: Andreas
+      - family-names: Keppler
+        given-names: Hans
+    journal: "Contributions to Mineralogy and Petrology"
+    year: 2011
+    volume: 161
+    start: 597
+    end: 613
+    doi: 10.1007/s00410-010-0552-9
