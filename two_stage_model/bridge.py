@@ -1,35 +1,28 @@
 """
-Bridge between the supplement dashboard and the unchanged two-stage fractionation
-code of this package (fluid_fractionation.py and its engine modules).
+Entry point of the two-stage fractionation model for the dashboard.
 
-The two-stage model reads its inputs from Streamlit session state. This module
-prepares those entries from `data/sample_input_data.xlsx` exactly as the project
-dashboard did, then calls `render_fluid_fractionation_section()`. Nothing in
-the engine modules is modified by this bridge.
+Reads the slab segments and the reference source from data/sample_input_data.xlsx,
+computes each segment's bulk partition coefficients with the partitioning
+engine, stores them in Streamlit session state and renders the model section.
 """
 
 import os
-import sys
 
 import numpy as np
 import pandas as pd
 import streamlit as st
 
-P2_DIR = os.path.dirname(os.path.abspath(__file__))                 # this package (engine modules)
-ROOT = os.path.dirname(P2_DIR)                                        # repository root
+from . import lava_data
+from .partitioning_engine import load_excel, normalize_headers, process_all_vectorized
+from .fractionation import render_fluid_fractionation_section
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # repository root
 DATA_DIR = os.path.join(ROOT, "data")
 INPUT_XLSX = os.path.join(DATA_DIR, "sample_input_data.xlsx")
 ARC_XLSX = os.path.join(DATA_DIR, "arc_data.xlsx")
 
-if P2_DIR not in sys.path:
-    sys.path.insert(0, P2_DIR)
-
-from CORE_scientific_calculations_engine import load_excel, normalize_headers, process_all_vectorized  # noqa: E402
-import arc_data_overlay  # noqa: E402
-
-# arc_data_overlay looks for the arc workbook next to itself; point it at data/ instead
-# (os.path.join with an absolute second argument returns that absolute path).
-arc_data_overlay.ARC_DATA_FILENAME = ARC_XLSX
+# lava_data looks for the workbook next to itself by default; use data/ instead
+lava_data.ARC_DATA_FILENAME = ARC_XLSX
 
 SALINITIES = [0.001, 5.0, 10.0, 15.0, 20.0]
 
@@ -164,5 +157,4 @@ def render_two_stage_model():
         "`Part2_Segments` of `data/sample_input_data.xlsx`; lava data from `data/arc_data.xlsx`."
     )
 
-    from fluid_fractionation import render_fluid_fractionation_section
     render_fluid_fractionation_section()

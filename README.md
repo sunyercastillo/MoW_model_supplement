@@ -1,10 +1,10 @@
 # Mo–W systematics of subduction-zone fluids — forward models
 
 Supplementary material to *<Article title>* (Geochimica et Cosmochimica Acta,
-2026). The repository contains the two forward models used in the article, the
-Excel workbook that reproduces every number of the sensitivity grids, the
-DataGraph tables behind the figure, and an interactive dashboard to explore the
-models with other inputs.
+2026): the two forward models used in the article as an interactive dashboard
+that can be run with other inputs. The Excel workbook reproducing the
+sensitivity grids cell by cell, and the DataGraph tables of the figure, are
+supplied as a separate supplementary file.
 
 **Live dashboard (no installation):** `<Streamlit Community Cloud URL>`
 
@@ -32,30 +32,24 @@ launch_dashboard.sh / .bat    one-click local launchers (macOS/Linux, Windows)
 requirements.txt              Python dependencies
 thermodynamic_model/
     model.py                  equations, constants and grid builders of the Mo-W Thermodynamic model
-    build_workbook.py         writes outputs/ (workbook, DataGraph tables, validation report)
 two_stage_model/
-    bridge.py                 reads data/ and feeds the two-stage model
-    fluid_fractionation.py    two-stage model and its plot
-    CORE_scientific_calculations_engine.py, sediment_endmembers.py, arc_data_overlay.py
+    bridge.py                 reads data/ and renders the two-stage model
+    fractionation.py          Rayleigh dehydration, redox filter and the δ⁹⁸/⁹⁵Mo plot
+    partitioning_engine.py    Bali et al. (2011, 2012) partition coefficients for each slab segment
+    sediment_endmembers.py    sediment end-members and mixing lines
+    lava_data.py              lava data overlay
 data/                         editable inputs (see "Changing inputs")
     model_inputs.xlsx         constants, end-members, grid axes
     sample_input_data.xlsx    slab segments for the two-stage model
     arc_data.xlsx             lava data and plotting styles
-outputs/
-    MoW_thermodynamic_model_grids.xlsx   workbook with live formulas (Inputs, Rutile, Salinity,
-                                         Pure_carbonate, C60_H40, DG_*, Checks)
-    datagraph/DG_*.txt                   tab-separated tables for DataGraph, one per grid
-    validation_report.md                 checks performed on grids and workbook
-docs/
-    audit_inputs_and_equations.md        equations, constants, and inconsistencies found in the sources
-    DataGraph_instructions.md            how the figure is assembled from the tables
+docs/audit_inputs_and_equations.md   equations, constants, and inconsistencies found in the sources
 .streamlit/config.toml        dashboard theme
 CITATION.cff · LICENSE (CC BY 4.0)
 ```
 
-`thermodynamic_model/model.py` is the single source of the Mo-W Thermodynamic
-model: the dashboard, the workbook builder and the DataGraph tables all use it,
-and the Excel formulas were checked against it (see the validation report).
+`thermodynamic_model/model.py` holds the Mo-W Thermodynamic model; the Excel
+workbook of the separate supplementary file was generated from, and verified
+against, the same definitions.
 
 ## Running the dashboard locally
 
@@ -76,21 +70,6 @@ python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 .venv/bin/streamlit run dashboard.py
 ```
-
-## Reproducing the published grids
-
-```bash
-.venv/bin/python -m thermodynamic_model.build_workbook
-```
-
-rebuilds `outputs/` from `data/model_inputs.xlsx`: the workbook with live,
-cell-referenced formulas (every constant is a named cell on `Inputs`), the four
-DataGraph tables and `outputs/validation_report.md`. The report lists the
-structural and geometric checks on the grids, an independent evaluation of every
-workbook formula against the Python model, and (when Microsoft Excel is
-available) a recalculation of the workbook by Excel itself. The dashboard's
-*Plotted XY pairs (TSV)* downloads are identical to the files in
-`outputs/datagraph/`.
 
 ## Changing inputs
 
@@ -119,11 +98,8 @@ Sheet `Grids`: ΔFMQ values, sediment additions, rutile contents and salinities
 of the grids. Values are read left to right; blank cells shorten a list; the
 sediment list must contain 0.
 
-The build script never overwrites `data/model_inputs.xlsx`; delete it to
-restore the published defaults (it is recreated on the next run). The `Checks`
-sheet and the ΔFMQ 0 comparison in the report assume the published grid axes.
-The workbook in `outputs/` can also be edited on its own through its `Inputs`
-sheet.
+Delete `data/model_inputs.xlsx` to restore the published defaults; the
+dashboard recreates it on the next start.
 
 ### Lava data — `data/arc_data.xlsx`
 
@@ -146,6 +122,14 @@ when pressure, temperature, ΔFMQ, the three modes and C0_MO, C0_Ce are filled;
 the segment is selected with the tick box in the dashboard. Sheet `Part1`: the
 first complete row provides the reference partition-coefficient table used as
 fallback by the two-stage model.
+
+## Downloads from the dashboard
+
+Under each grid: *Plotted XY pairs (TSV)* gives the exact plotted coordinates
+in the DataGraph layout (ΔFMQ curves, Band1–5 polygons with `Band_mask`, and
+the dashed isopleths); *Full calculation table (CSV)* lists every intermediate
+quantity of every grid point. Plotly's camera icon exports each panel as SVG.
+The two-stage model has its own copy block for the plotted lines.
 
 ## Fixed choices worth knowing
 

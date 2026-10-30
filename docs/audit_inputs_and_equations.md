@@ -1,9 +1,10 @@
 # Audit of inputs and equations — Mo/W–U/Th sensitivity grids
 
 Scope: the forward model of Bali et al. (2011, 2012) as implemented in the
-project workbook `Bali model.xlsx` (sheet `Calculations`), in the Python engine
-`CORE_scientific_calculations_engine.py`, and as published in Bali et al. (2012)
-Appendix C (`1-s2.0-S0012821X12004074-mmc3.doc`). Date: 2026-10-30.
+authors' working spreadsheet (`Bali model.xlsx`, sheet `Calculations`), in the
+Python partitioning engine (now `two_stage_model/partitioning_engine.py`), and as
+published in Bali et al. (2012) Appendix C (electronic supplement mmc3).
+Date: 2026-10-30.
 
 ## 1. Equations used (identical in workbook and engine)
 
@@ -60,20 +61,22 @@ Effect at ΔFMQ 0, 0 wt.% sediment, Mo_a = 0.44: Table B1 values give U/Th
 of the Mo/W difference, because the 99 % mantle term dominates the source W
 budget. **Decision (author):** Table B1 values.
 
-### 2.3 Sediment end-members in the Supplementary Methods text
+### 2.3 Sediment end-members in an earlier draft of the methods text
 
-`Supplementary_Methods.md` §9 still lists older sediment values (carbonate Mo
-1.09, W 0.19, U 0.57; hemipelagic Mo 3.96, W 1.22, U 3.72; no Th). The code
-(`sediment_endmembers.py`) and Table B1 use the EA-1 unit means: carbonate
-1.087 / 0.187 / 0.684 / 0.222 and hemipelagic 5.626 / 0.874 / 4.117 / 2.656
-(Mo / W / U / Th). The grids use Table B1. The methods text must be updated.
+An earlier draft of the Supplementary Methods (§9) listed older sediment values
+(carbonate Mo 1.09, W 0.19, U 0.57; hemipelagic Mo 3.96, W 1.22, U 3.72; no
+Th). The code (`sediment_endmembers.py`) and Table B1 use the EA-1 unit means:
+carbonate 1.087 / 0.187 / 0.684 / 0.222 and hemipelagic 5.626 / 0.874 / 4.117 /
+2.656 (Mo / W / U / Th). The grids use Table B1; the methods text must match.
 
-### 2.4 Legacy N-MORB dictionary in the engine
+### 2.4 N-MORB and depleted-mantle constants of the engine (corrected)
 
-`BaliConstants.morb_concentrations` (Mo 0.19, W 0.040, U 0.047, Th 0.087) is a
-legacy default that is overridden whenever the input workbook supplies C₀. It is
-not used by the grids. It should be removed or replaced by the Table B1 values
-before publication to avoid confusion.
+The engine's default `morb_concentrations` (Mo 0.19, W 0.040, U 0.047, Th
+0.087) and `dm_concentrations` (W 0.0024, U 0.0047, Th 0.0137) were legacy
+values that were overridden whenever the input workbook supplied C₀ but were
+still used for the end-member markers of the two-stage model. In this package
+both dictionaries are set to the Table B1 values, identical to
+`data/model_inputs.xlsx`.
 
 ### 2.5 Panel A (residual rutile) uses the fluid composition
 

@@ -1,63 +1,40 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
-Fluid Fractionation Module for Bali et al. (2012) Dashboard
-============================================================
+Two-stage fractionation model.
 
-Implements cumulative Rayleigh extracted-fluid model (Chen-style) for Mo isotopes 
-and Mo/Ce in the extracted fluid, plus U and Th concentration evolution for U/Th ratios.
+Stage 1 — Rayleigh dehydration of an eclogite slab segment: Mo, W, U, Th, Ce,
+Nb, La and δ⁹⁸/⁹⁵Mo of the cumulative extracted fluid as a function of the fluid
+fraction F, with bulk partition coefficients from the partitioning engine at the
+segment's own temperature and ΔFMQ and a fluid–eclogite fractionation factor α.
 
-This module:
-- Does NOT modify any existing Bali calculations
-- Reads already-computed values from st.session_state (requires minimal hook in main app)
-- Provides pure computation functions and UI rendering components
+Stage 2 — redox filter: the fluid re-equilibrates with a sediment buffered at
+ΔFMQ_filter, loses Mo and drifts to heavier δ⁹⁸/⁹⁵Mo (fractionation factor α_r).
 
-Required session_state keys (must be set by main app):
-- st.session_state['bali_results_df']: DataFrame with MO_Dbulk, CE_Dbulk, U_Dbulk, TH_Dbulk columns
-- st.session_state['bali_source_params']: dict with 'MO', 'Ce', 'U', 'Th' initial concentrations  
-- st.session_state['bali_selected_salinity']: float, selected NaCl wt%
-
-Author: Fluid Fractionation Extension
-Date: January 2026
+Inputs are prepared by bridge.py from the workbooks in data/; the public entry
+point is render_fluid_fractionation_section().
 """
 
 import numpy as np
 import pandas as pd
 import streamlit as st
 import plotly.graph_objects as go
-from typing import Dict, List, Tuple, Optional, Any
+from typing import Dict, List, Tuple, Optional
 
-# Import arc data overlay functions
-try:
-    from arc_data_overlay import (add_arc_overlay_to_figure, build_default_styles, load_arc_data_from_file,
-                                  render_arc_data_upload_section)
-    ARC_OVERLAY_AVAILABLE = True
-except ImportError:
-    ARC_OVERLAY_AVAILABLE = False
-
-# Import sediment endmember overlay
-try:
-    from sediment_endmembers import (
-        add_sediment_overlay_xonly,
-        add_endmember_markers_xonly,
-        make_mixed_sediment,
-        NMORB, D98MO_NMORB,
-        D98MO_CARBONATES, D98MO_HEMIPELAGIC,
-        SUBDUCTED_CARBONATES, SUBDUCTED_HEMIPELAGIC,
-    )
-    SEDIMENT_OVERLAY_AVAILABLE = True
-except ImportError:
-    SEDIMENT_OVERLAY_AVAILABLE = False
+from .lava_data import add_arc_overlay_to_figure, load_arc_data_from_file
+from .sediment_endmembers import (
+    make_mixed_sediment,
+    D98MO_CARBONATES, D98MO_HEMIPELAGIC,
+    SUBDUCTED_CARBONATES, SUBDUCTED_HEMIPELAGIC,
+)
 
 # ============================================================================
 # CONSTANTS
 # ============================================================================
-# φ (Zr-in-rutile temperature correction) is NO LONGER hard-coded. It is read per
-# segment from the 'Part2_Segments' sheet (column `phi`) and applied only in Part 2.
+# φ (Zr-in-rutile temperature correction) is read per segment from the
+# 'Part2_Segments' sheet (column `phi`).
 W_D_RUT_FIXED = 1.250       # Fixed W rutile partition coefficient (NOT corrected by φ)
 
 # ============================================================================
-# F GRID (exact list as specified)
+# F grid
 # ============================================================================
 F_LIST_DEFAULT = [
     0.00, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09,
@@ -80,9 +57,8 @@ F_HIGHLIGHT = [0.10, 0.20, 0.30]
 # −0.5…−4). Mechanism = fluid–rock RE-EQUILIBRATION (partitioning): the fluid
 # exchanges Mo with the filter rock and its exit value is rock-buffered,
 #     C_eq = C_rock^filter / D_bulk(T, ΔFMQ_filter)      (clipped ≤ C_start)
-# valid for the DILUTE Stage-1 fluid (which is ×600–1000 below the Bali
-# solubility ceiling — the audit removed the earlier proportional/saturation
-# law for exactly that reason; see DEEP_RESEARCH §19.4.0). The exchange
+# valid for the dilute Stage-1 fluid (×600–1000 below the Bali solubility
+# ceiling, so a saturation-limited law does not apply). The exchange
 # progress f_ex (0→1) spans no-exchange → full equilibration; the clip
 # guarantees the sediment never ADDS net Mo. Note C_exit is NOT zero: a
 # Mo-bearing rock buffers the fluid at C_rock/D — equilibrium forbids total
@@ -332,7 +308,7 @@ def compute_fluid_fractionation(
                 
                 row['MoCe_f_cum'] = MoCe_f_cum
                 
-                # (7) U and Th calculations (same Chen-style Rayleigh)
+                # (7) U and Th calculations (same Rayleigh law)
                 if compute_u_th:
                     # Residual rock concentrations for U and Th
                     cs_U = C0_U * ((1.0 - F) ** ((1.0 / U_Dbulk) - 1.0))
@@ -370,7 +346,7 @@ def compute_fluid_fractionation(
                     row['cf_cum_Th'] = np.nan
                     row['UTh_f_cum'] = np.nan
                 
-                # (8) W calculations (same Chen-style Rayleigh)
+                # (8) W calculations (same Rayleigh law)
                 if compute_w:
                     # Residual rock concentration for W
                     cs_W = C0_W * ((1.0 - F) ** ((1.0 / W_Dbulk) - 1.0))
@@ -413,7 +389,7 @@ def compute_fluid_fractionation(
                     row['MoW_f_cum'] = np.nan
                     row['WCe_f_cum'] = np.nan
                 
-                # (9) Nb and La calculations (same Chen-style Rayleigh)
+                # (9) Nb and La calculations (same Rayleigh law)
                 if compute_nb_la:
                     cs_Nb = C0_Nb * ((1.0 - F) ** ((1.0 / NB_Dbulk) - 1.0))
                     cs_La = C0_La * ((1.0 - F) ** ((1.0 / LA_Dbulk) - 1.0))
@@ -506,7 +482,7 @@ def compute_filter_reequilibration(
 
         C_f(f_ex)  = (1−f_ex)·C_start + f_ex·C_eq
 
-    ISOTOPES — direction audit (fluid evolves HEAVIER, never lighter):
+    Isotopes (the fluid evolves heavier, never lighter):
     the Mo removed into the filter solids is the REDUCED species (Mo⁶⁺→Mo⁴⁺,
     weaker/longer bonds) and is therefore isotopically LIGHT relative to the
     fluid — the same polarity as Stage 1, where rutile (distorted octahedra)
@@ -534,7 +510,7 @@ def compute_filter_reequilibration(
     both. The filter's PRE-EXISTING Mo inventory is assumed isotopically
     ISOLATED (refractory; no dissolution–reprecipitation on transit
     timescales) — full exchange with it would instead drag the fluid toward
-    the sediment δ (≈ −1.8 ‰, lighter), a rejected endmember (DEEP §19.4.0).
+    the sediment δ (≈ −1.8 ‰, lighter), a rejected endmember.
     Consistency: zero removal (clip, g = 1) ⇒ zero isotopic shift. W is
     treated analogously with its own filter D; fixed-D elements (Ce, Nb, Th,
     La) pass through unchanged. C_eq is clipped ≤ C_start (the filter never
@@ -706,945 +682,9 @@ def extract_reduction_start(
     }
 
 
-def get_bali_parameters_from_session(selected_salinity: float = None) -> Optional[Dict[str, Any]]:
-    """
-    Retrieve Bali model parameters from Streamlit session state.
-    
-    Parameters
-    ----------
-    selected_salinity : float, optional
-        The salinity (NaCl wt%) to use for D_bulk values.
-        If None, uses the first available salinity.
-    
-    Returns
-    -------
-    dict or None
-        Dictionary with keys: C0_MO, C0_Ce, C0_U, C0_Th, C0_W, MO_Dbulk, CE_Dbulk, 
-        U_Dbulk, TH_Dbulk, W_Dbulk, salinity, NaCl_molality
-        Returns None if required data is not available in session state.
-    
-    Notes
-    -----
-    - C0_MO, C0_Ce, C0_U, C0_Th, C0_W are initial concentrations from source rock (ppm)
-    - MO_Dbulk, CE_Dbulk, U_Dbulk, TH_Dbulk, W_Dbulk are salinity-dependent bulk partition coefficients
-    - Salinity is expressed in wt% NaCl but internally converted to molality (mol/kg)
-      for the Bali partition coefficient calculations
-    """
-    # Check if required session state keys exist
-    required_keys = ['bali_results_df', 'bali_source_params']
-    
-    for key in required_keys:
-        if key not in st.session_state:
-            return None
-    
-    # Prefer the 1000°C base (Chen-consistent base for the φ(600°C) correction); fall
-    # back to the row's-T results if the main app did not store it.
-    results_df = st.session_state.get('bali_results_df_p2base')
-    if results_df is None:
-        results_df = st.session_state['bali_results_df']
-    source_params = st.session_state['bali_source_params']
-
-    if results_df is None or results_df.empty:
-        return None
-    
-    # Get C0 values from source parameters (these are salinity-independent)
-    C0_MO = source_params.get('MO', source_params.get('C0_MO'))
-    C0_Ce = source_params.get('Ce', source_params.get('C0_Ce'))
-    C0_U = source_params.get('U', source_params.get('C0_U'))
-    C0_Th = source_params.get('Th', source_params.get('C0_Th'))
-    C0_W = source_params.get('W', source_params.get('C0_W'))
-    C0_Nb = source_params.get('Nb', source_params.get('C0_Nb'))
-    C0_La = source_params.get('La', source_params.get('C0_La'))
-    
-    if C0_MO is None or C0_Ce is None:
-        return None
-    
-    # Get D_bulk values for selected salinity
-    if selected_salinity is not None:
-        salinity_row = results_df[results_df['NaCl_wt_pct'] == selected_salinity]
-    else:
-        salinity_row = pd.DataFrame()
-    
-    if salinity_row.empty:
-        # Fallback: use first available salinity
-        salinity_row = results_df.iloc[[0]]
-        selected_salinity = salinity_row['NaCl_wt_pct'].iloc[0]
-    
-    MO_Dbulk = salinity_row['MO_Dbulk'].iloc[0]
-    CE_Dbulk = salinity_row['CE_Dbulk'].iloc[0]
-    
-    # Get U, Th, and W D_bulk values (may not exist in older results)
-    U_Dbulk = salinity_row['U_Dbulk'].iloc[0] if 'U_Dbulk' in salinity_row.columns else None
-    TH_Dbulk = salinity_row['TH_Dbulk'].iloc[0] if 'TH_Dbulk' in salinity_row.columns else None
-    W_Dbulk = salinity_row['W_Dbulk'].iloc[0] if 'W_Dbulk' in salinity_row.columns else None
-    NB_Dbulk = salinity_row['NB_Dbulk'].iloc[0] if 'NB_Dbulk' in salinity_row.columns else None
-    LA_Dbulk = salinity_row['LA_Dbulk'].iloc[0] if 'LA_Dbulk' in salinity_row.columns else None
-    
-    # Get molality if available (for display purposes)
-    NaCl_molality = salinity_row['NaCl_m'].iloc[0] if 'NaCl_m' in salinity_row.columns else None
-    
-    return {
-        'C0_MO': float(C0_MO),
-        'C0_Ce': float(C0_Ce),
-        'C0_U': float(C0_U) if C0_U is not None else None,
-        'C0_Th': float(C0_Th) if C0_Th is not None else None,
-        'C0_W': float(C0_W) if C0_W is not None else None,
-        'C0_Nb': float(C0_Nb) if C0_Nb is not None else None,
-        'C0_La': float(C0_La) if C0_La is not None else None,
-        'MO_Dbulk': float(MO_Dbulk),
-        'CE_Dbulk': float(CE_Dbulk),
-        'U_Dbulk': float(U_Dbulk) if U_Dbulk is not None else None,
-        'TH_Dbulk': float(TH_Dbulk) if TH_Dbulk is not None else None,
-        'W_Dbulk': float(W_Dbulk) if W_Dbulk is not None else None,
-        'NB_Dbulk': float(NB_Dbulk) if NB_Dbulk is not None else None,
-        'LA_Dbulk': float(LA_Dbulk) if LA_Dbulk is not None else None,
-        'salinity': float(selected_salinity),
-        'NaCl_molality': float(NaCl_molality) if NaCl_molality is not None else None
-    }
-
-
-def get_available_salinities() -> List[float]:
-    """
-    Get list of available salinities from the Bali results DataFrame.
-    
-    Returns
-    -------
-    list of float
-        Available salinity values (NaCl wt%)
-    """
-    if 'bali_results_df' not in st.session_state:
-        return [0.001, 5.0, 10.0, 15.0, 20.0]  # Default list
-    
-    results_df = st.session_state['bali_results_df']
-    if results_df is None or results_df.empty:
-        return [0.001, 5.0, 10.0, 15.0, 20.0]
-    
-    return sorted(results_df['NaCl_wt_pct'].unique().tolist())
-
-
 # ============================================================================
 # UI RENDERING FUNCTIONS
 # ============================================================================
-
-def create_fractionation_plot(
-    title: str = "δ⁹⁸/⁹⁵Mo vs Mo/Ce (Cumulative Extracted Fluid)",
-    log_x: bool = True,
-    arc_df: Optional[pd.DataFrame] = None,
-    style_df: Optional[pd.DataFrame] = None,
-    arc_settings: Optional[Dict] = None,
-    dfmq: float = None,
-    mode_rut_pct: float = None
-) -> go.Figure:
-    """
-    Create plot of δ⁹⁸/⁹⁵Mo (cumulative fluid) vs Mo/Ce (cumulative fluid) for all alphas.
-    
-    Parameters
-    ----------
-    title : str
-        Plot title
-    log_x : bool
-        Whether to use logarithmic x-axis
-    arc_df : pd.DataFrame, optional
-        Arc sample data for overlay
-    style_df : pd.DataFrame, optional
-        Style definitions for arc data
-    arc_settings : dict, optional
-        Arc display settings (color_by, symbol_by, show_error_bars, etc.)
-    dfmq : float, optional
-        ΔFMQ value to display in annotation
-    mode_rut_pct : float, optional
-        Rutile modal percentage to display in annotation
-    
-    Returns
-    -------
-    plotly.graph_objects.Figure
-    """
-    
-    fig = go.Figure()
-    
-    
-    
-    # ========== ADD ARC DATA OVERLAY ==========
-    if ARC_OVERLAY_AVAILABLE and arc_df is not None and not arc_df.empty:
-        if arc_settings is None:
-            arc_settings = {
-                'color_by': 'Arc',
-                'symbol_by': 'Arc',
-                'show_error_bars': True,
-                'show_labels': False,
-                'legend_by': 'Arc',
-                'filters': {}
-            }
-        
-        fig = add_arc_overlay_to_figure(
-            fig=fig,
-            arc_df=arc_df,
-            style_df=style_df,
-            x_col='Mo_Ce',
-            y_col='d98Mo',
-            x_err_col='Mo_Ce_err' if arc_settings.get('show_error_bars', True) else None,
-            y_err_col='d98Mo_2SE' if arc_settings.get('show_error_bars', True) else None,
-            color_by=arc_settings.get('color_by', 'Arc'),
-            symbol_by=arc_settings.get('symbol_by', 'Arc'),
-            show_error_bars=arc_settings.get('show_error_bars', True),
-            show_labels=arc_settings.get('show_labels', False),
-            legend_by=arc_settings.get('legend_by', 'Arc'),
-            filters=arc_settings.get('filters', {})
-        )
-    
-    
-    # Plot layout: square plot box, horizontal legend below (house style = Plot H)
-    _p2_margin = dict(l=60, r=40, t=50, b=150)
-    _p2_fig_w = 560
-    _p2_fig_h = 650
-    fig.update_layout(
-        title=dict(
-            text=title, 
-            font=dict(size=14, color='black', family='Arial'),
-            x=0.4,  # Shift title left to center over plot area
-            xanchor='center'
-        ),
-        xaxis_title=dict(text='Mo/Ce (cumulative fluid)', font=dict(size=12, color='black')),
-        yaxis_title=dict(text='δ⁹⁸/⁹⁵Mo (‰, cumulative fluid)', font=dict(size=12, color='black')),
-        template='plotly_white',
-        width=_p2_fig_w,
-        height=_p2_fig_h,
-        margin=_p2_margin,
-        legend=dict(
-            orientation="h",
-            yanchor="top",
-            y=-0.13,
-            xanchor="left",
-            x=0.0,
-            bgcolor='rgba(0,0,0,0)',
-            borderwidth=0,
-            font=dict(color='black', size=9),
-            tracegroupgap=1,
-        ),
-        hovermode='closest',
-        xaxis=dict(
-            type='log' if log_x else 'linear',
-            autorange=True,  # Auto-scale x-axis
-            showgrid=True,
-            gridcolor='rgba(180,180,180,0.4)',
-            gridwidth=1,
-            showline=True,
-            linecolor='black',
-            linewidth=2,
-            mirror=True,
-            ticks='outside',
-            ticklen=6,
-            tickwidth=1,
-            tickcolor='black',
-            tickfont=dict(color='black', size=10),
-            dtick=1 if log_x else None,
-            minor=dict(ticks='outside', ticklen=3, showgrid=True, gridcolor='rgba(200,200,200,0.3)')
-        ),
-        yaxis=dict(
-            autorange=True,  # Auto-scale y-axis
-            showgrid=True,
-            gridcolor='rgba(180,180,180,0.4)',
-            gridwidth=1,
-            showline=True,
-            linecolor='black',
-            linewidth=2,
-            mirror=True,
-            ticks='outside',
-            ticklen=6,
-            tickwidth=1,
-            tickcolor='black',
-            tickfont=dict(color='black', size=10),
-            zeroline=False,
-            dtick=0.2,
-            minor=dict(ticks='outside', ticklen=3, showgrid=True, gridcolor='rgba(200,200,200,0.3)')
-        ),
-        plot_bgcolor='white',
-        paper_bgcolor='white'
-    )
-    
-    # Add annotation for ΔFMQ and rutile content outside plot, bottom-right
-    if dfmq is not None and mode_rut_pct is not None:
-        # bottom margin already reserves space for the horizontal legend
-        fig.add_annotation(
-            text=f"ΔFMQ {dfmq:+.2f} | rt: {mode_rut_pct:.2f}%",
-            xref="paper",
-            yref="paper",
-            x=1.0,
-            y=1.06,
-            xanchor="right",
-            yanchor="bottom",
-            font=dict(size=10, color='black'),
-            showarrow=False
-        )
-    
-    return fig
-
-
-def create_fractionation_plot_vs_uth(
-    title: str = "δ⁹⁸/⁹⁵Mo vs U/Th (Cumulative Extracted Fluid)",
-    log_x: bool = True,
-    arc_df: Optional[pd.DataFrame] = None,
-    style_df: Optional[pd.DataFrame] = None,
-    arc_settings: Optional[Dict] = None,
-    dfmq: float = None,
-    mode_rut_pct: float = None
-) -> go.Figure:
-    """
-    Create plot of δ⁹⁸/⁹⁵Mo (cumulative fluid) vs U/Th (cumulative fluid) for all alphas.
-    
-    Parameters
-    ----------
-    title : str
-        Plot title
-    log_x : bool
-        Whether to use logarithmic x-axis
-    arc_df : pd.DataFrame, optional
-        Arc sample data for overlay
-    style_df : pd.DataFrame, optional
-        Style definitions for arc data
-    arc_settings : dict, optional
-        Arc display settings (color_by, symbol_by, show_error_bars, etc.)
-    dfmq : float, optional
-        ΔFMQ value to display in annotation
-    mode_rut_pct : float, optional
-        Rutile modal percentage to display in annotation
-    
-    Returns
-    -------
-    plotly.graph_objects.Figure
-    """
-    
-    fig = go.Figure()
-    
-    
-    
-    
-    
-    # ========== ADD ARC DATA OVERLAY ==========
-    if ARC_OVERLAY_AVAILABLE and arc_df is not None and not arc_df.empty:
-        if arc_settings is None:
-            arc_settings = {
-                'color_by': 'Arc',
-                'symbol_by': 'Arc',
-                'show_error_bars': True,
-                'show_labels': False,
-                'legend_by': 'Arc',
-                'filters': {}
-            }
-        
-        fig = add_arc_overlay_to_figure(
-            fig=fig,
-            arc_df=arc_df,
-            style_df=style_df,
-            x_col='U_Th',
-            y_col='d98Mo',
-            x_err_col='U_Th_err' if arc_settings.get('show_error_bars', True) else None,
-            y_err_col='d98Mo_2SE' if arc_settings.get('show_error_bars', True) else None,
-            color_by=arc_settings.get('color_by', 'Arc'),
-            symbol_by=arc_settings.get('symbol_by', 'Arc'),
-            show_error_bars=arc_settings.get('show_error_bars', True),
-            show_labels=arc_settings.get('show_labels', False),
-            legend_by=arc_settings.get('legend_by', 'Arc'),
-            filters=arc_settings.get('filters', {})
-        )
-    
-    
-    # Plot layout: 500x500 graph box
-    fig.update_layout(
-        title=dict(
-            text=title, 
-            font=dict(size=14, color='black', family='Arial'),
-            x=0.4,
-            xanchor='center'
-        ),
-        xaxis_title=dict(text='U/Th (cumulative fluid)', font=dict(size=12, color='black')),
-        yaxis_title=dict(text='δ⁹⁸/⁹⁵Mo (‰, cumulative fluid)', font=dict(size=12, color='black')),
-        template='plotly_white',
-        width=560,
-        height=650,
-        margin=dict(l=60, r=40, t=50, b=150),
-        legend=dict(
-            orientation="h",
-            yanchor="top",
-            y=-0.13,
-            xanchor="left",
-            x=0.0,
-            bgcolor='rgba(0,0,0,0)',
-            borderwidth=0,
-            font=dict(color='black', size=9),
-            tracegroupgap=1,
-        ),
-        hovermode='closest',
-        xaxis=dict(
-            type='log' if log_x else 'linear',
-            autorange=True,
-            showgrid=True,
-            gridcolor='rgba(180,180,180,0.4)',
-            gridwidth=1,
-            showline=True,
-            linecolor='black',
-            linewidth=2,
-            mirror=True,
-            ticks='outside',
-            ticklen=6,
-            tickwidth=1,
-            tickcolor='black',
-            tickfont=dict(color='black', size=10),
-            dtick=1 if log_x else None,
-            minor=dict(ticks='outside', ticklen=3, showgrid=True, gridcolor='rgba(200,200,200,0.3)')
-        ),
-        yaxis=dict(
-            autorange=True,
-            showgrid=True,
-            gridcolor='rgba(180,180,180,0.4)',
-            gridwidth=1,
-            showline=True,
-            linecolor='black',
-            linewidth=2,
-            mirror=True,
-            ticks='outside',
-            ticklen=6,
-            tickwidth=1,
-            tickcolor='black',
-            tickfont=dict(color='black', size=10),
-            zeroline=False,
-            dtick=0.2,
-            minor=dict(ticks='outside', ticklen=3, showgrid=True, gridcolor='rgba(200,200,200,0.3)')
-        ),
-        plot_bgcolor='white',
-        paper_bgcolor='white'
-    )
-    
-    # Add annotation for ΔFMQ and rutile content outside plot, bottom-right
-    if dfmq is not None and mode_rut_pct is not None:
-        # bottom margin already reserves space for the horizontal legend
-        fig.add_annotation(
-            text=f"ΔFMQ {dfmq:+.2f} | rt: {mode_rut_pct:.2f}%",
-            xref="paper",
-            yref="paper",
-            x=1.0,
-            y=1.06,
-            xanchor="right",
-            yanchor="bottom",
-            font=dict(size=10, color='black'),
-            showarrow=False
-        )
-    
-    return fig
-
-
-def create_fractionation_plot_vs_wth(
-    title: str = "δ⁹⁸/⁹⁵Mo vs W/Th (Cumulative Extracted Fluid)",
-    log_x: bool = True,
-    arc_df: Optional[pd.DataFrame] = None,
-    style_df: Optional[pd.DataFrame] = None,
-    arc_settings: Optional[Dict] = None,
-    dfmq: float = None,
-    mode_rut_pct: float = None
-) -> go.Figure:
-    """
-    Create plot of δ⁹⁸/⁹⁵Mo (cumulative fluid) vs W/Th (cumulative fluid) for all alphas.
-    
-    Plot C: X = W/Th ratio in cumulative fluid, Y = δ⁹⁸/⁹⁵Mo in cumulative fluid.
-    
-    Parameters
-    ----------
-    title : str
-        Plot title
-    log_x : bool
-        Whether to use logarithmic x-axis
-    arc_df : pd.DataFrame, optional
-        Arc sample data for overlay (uses x_col='W_Th', y_col='d98Mo')
-    style_df : pd.DataFrame, optional
-        Style definitions for arc data
-    arc_settings : dict, optional
-        Arc display settings
-    dfmq : float, optional
-        ΔFMQ value to display in annotation
-    mode_rut_pct : float, optional
-        Rutile modal percentage to display in annotation
-    
-    Returns
-    -------
-    plotly.graph_objects.Figure
-    """
-    
-    fig = go.Figure()
-    
-    
-    
-    
-    # Arc overlay for W/Th vs d98Mo
-    if ARC_OVERLAY_AVAILABLE and arc_df is not None and not arc_df.empty:
-        if arc_settings is None:
-            arc_settings = {
-                'color_by': 'Arc',
-                'symbol_by': 'Arc',
-                'show_error_bars': True,
-                'show_labels': False,
-                'legend_by': 'Arc',
-                'filters': {}
-            }
-        
-        fig = add_arc_overlay_to_figure(
-            fig=fig,
-            arc_df=arc_df,
-            style_df=style_df,
-            x_col='W_Th',
-            y_col='d98Mo',
-            x_err_col='W_Th_err' if arc_settings.get('show_error_bars', True) else None,
-            y_err_col='d98Mo_2SE' if arc_settings.get('show_error_bars', True) else None,
-            color_by=arc_settings.get('color_by', 'Arc'),
-            symbol_by=arc_settings.get('symbol_by', 'Arc'),
-            show_error_bars=arc_settings.get('show_error_bars', True),
-            show_labels=arc_settings.get('show_labels', False),
-            legend_by=arc_settings.get('legend_by', 'Arc'),
-            filters=arc_settings.get('filters', {})
-        )
-    
-    
-    fig.update_layout(
-        title=dict(
-            text=title, 
-            font=dict(size=14, color='black', family='Arial'),
-            x=0.4,
-            xanchor='center'
-        ),
-        xaxis_title=dict(text='W/Th (cumulative fluid)', font=dict(size=12, color='black')),
-        yaxis_title=dict(text='δ⁹⁸/⁹⁵Mo (‰, cumulative fluid)', font=dict(size=12, color='black')),
-        template='plotly_white',
-        width=560,
-        height=650,
-        margin=dict(l=60, r=40, t=50, b=150),
-        legend=dict(
-            orientation="h",
-            yanchor="top",
-            y=-0.13,
-            xanchor="left",
-            x=0.0,
-            bgcolor='rgba(0,0,0,0)',
-            borderwidth=0,
-            font=dict(color='black', size=9),
-            tracegroupgap=1,
-        ),
-        hovermode='closest',
-        xaxis=dict(
-            type='log' if log_x else 'linear',
-            autorange=True,
-            showgrid=True,
-            gridcolor='rgba(180,180,180,0.4)',
-            gridwidth=1,
-            showline=True,
-            linecolor='black',
-            linewidth=2,
-            mirror=True,
-            ticks='outside',
-            ticklen=6,
-            tickwidth=1,
-            tickcolor='black',
-            tickfont=dict(color='black', size=10),
-            dtick=1 if log_x else None,
-            minor=dict(ticks='outside', ticklen=3, showgrid=True, gridcolor='rgba(200,200,200,0.3)')
-        ),
-        yaxis=dict(
-            autorange=True,
-            showgrid=True,
-            gridcolor='rgba(180,180,180,0.4)',
-            gridwidth=1,
-            showline=True,
-            linecolor='black',
-            linewidth=2,
-            mirror=True,
-            ticks='outside',
-            ticklen=6,
-            tickwidth=1,
-            tickcolor='black',
-            tickfont=dict(color='black', size=10),
-            zeroline=False,
-            dtick=0.2,
-            minor=dict(ticks='outside', ticklen=3, showgrid=True, gridcolor='rgba(200,200,200,0.3)')
-        ),
-        plot_bgcolor='white',
-        paper_bgcolor='white'
-    )
-    
-    if dfmq is not None and mode_rut_pct is not None:
-        # bottom margin already reserves space for the horizontal legend
-        fig.add_annotation(
-            text=f"ΔFMQ {dfmq:+.2f} | rt: {mode_rut_pct:.2f}%",
-            xref="paper",
-            yref="paper",
-            x=1.0,
-            y=1.06,
-            xanchor="right",
-            yanchor="bottom",
-            font=dict(size=10, color='black'),
-            showarrow=False
-        )
-    
-    return fig
-
-
-def create_fractionation_plot_vs_mow(
-    title: str = "δ⁹⁸/⁹⁵Mo vs Mo/W (Cumulative Extracted Fluid)",
-    log_x: bool = True,
-    arc_df: Optional[pd.DataFrame] = None,
-    style_df: Optional[pd.DataFrame] = None,
-    arc_settings: Optional[Dict] = None,
-    dfmq: float = None,
-    mode_rut_pct: float = None
-) -> go.Figure:
-    """
-    Create plot of δ⁹⁸/⁹⁵Mo (cumulative fluid) vs Mo/W (cumulative fluid) for all alphas.
-    
-    Plot D: X = Mo/W ratio in cumulative fluid, Y = δ⁹⁸/⁹⁵Mo in cumulative fluid.
-    
-    Parameters
-    ----------
-    title : str
-        Plot title
-    log_x : bool
-        Whether to use logarithmic x-axis
-    arc_df : pd.DataFrame, optional
-        Arc sample data for overlay (uses x_col='Mo_W', y_col='d98Mo')
-    style_df : pd.DataFrame, optional
-        Style definitions for arc data
-    arc_settings : dict, optional
-        Arc display settings
-    dfmq : float, optional
-        ΔFMQ value to display in annotation
-    mode_rut_pct : float, optional
-        Rutile modal percentage to display in annotation
-    
-    Returns
-    -------
-    plotly.graph_objects.Figure
-    """
-    
-    fig = go.Figure()
-    
-    
-    
-    
-    # Arc overlay for δ⁹⁸/⁹⁵Mo vs Mo/W
-    if ARC_OVERLAY_AVAILABLE and arc_df is not None and not arc_df.empty:
-        if arc_settings is None:
-            arc_settings = {
-                'color_by': 'Arc',
-                'symbol_by': 'Arc',
-                'show_error_bars': True,
-                'show_labels': False,
-                'legend_by': 'Arc',
-                'filters': {}
-            }
-        
-        fig = add_arc_overlay_to_figure(
-            fig=fig,
-            arc_df=arc_df,
-            style_df=style_df,
-            x_col='Mo_W',
-            y_col='d98Mo',
-            x_err_col='Mo_W_err' if arc_settings.get('show_error_bars', True) else None,
-            y_err_col='d98Mo_2SE' if arc_settings.get('show_error_bars', True) else None,
-            color_by=arc_settings.get('color_by', 'Arc'),
-            symbol_by=arc_settings.get('symbol_by', 'Arc'),
-            show_error_bars=arc_settings.get('show_error_bars', True),
-            show_labels=arc_settings.get('show_labels', False),
-            legend_by=arc_settings.get('legend_by', 'Arc'),
-            filters=arc_settings.get('filters', {})
-        )
-    
-    
-    fig.update_layout(
-        title=dict(
-            text=title, 
-            font=dict(size=14, color='black', family='Arial'),
-            x=0.4,
-            xanchor='center'
-        ),
-        xaxis_title=dict(text='Mo/W (cumulative fluid)', font=dict(size=12, color='black')),
-        yaxis_title=dict(text='δ⁹⁸/⁹⁵Mo (‰, cumulative fluid)', font=dict(size=12, color='black')),
-        template='plotly_white',
-        width=560,
-        height=650,
-        margin=dict(l=60, r=40, t=50, b=150),
-        legend=dict(
-            orientation="h",
-            yanchor="top",
-            y=-0.13,
-            xanchor="left",
-            x=0.0,
-            bgcolor='rgba(0,0,0,0)',
-            borderwidth=0,
-            font=dict(color='black', size=9),
-            tracegroupgap=1,
-        ),
-        hovermode='closest',
-        xaxis=dict(
-            type='log' if log_x else 'linear',
-            autorange=True,
-            showgrid=True,
-            gridcolor='rgba(180,180,180,0.4)',
-            gridwidth=1,
-            showline=True,
-            linecolor='black',
-            linewidth=2,
-            mirror=True,
-            ticks='outside',
-            ticklen=6,
-            tickwidth=1,
-            tickcolor='black',
-            tickfont=dict(color='black', size=10),
-            dtick=1 if log_x else None,
-            minor=dict(ticks='outside', ticklen=3, showgrid=True, gridcolor='rgba(200,200,200,0.3)')
-        ),
-        yaxis=dict(
-            autorange=True,
-            showgrid=True,
-            gridcolor='rgba(180,180,180,0.4)',
-            gridwidth=1,
-            showline=True,
-            linecolor='black',
-            linewidth=2,
-            mirror=True,
-            ticks='outside',
-            ticklen=6,
-            tickwidth=1,
-            tickcolor='black',
-            tickfont=dict(color='black', size=10),
-            zeroline=False,
-            dtick=0.2,
-            minor=dict(ticks='outside', ticklen=3, showgrid=True, gridcolor='rgba(200,200,200,0.3)')
-        ),
-        plot_bgcolor='white',
-        paper_bgcolor='white'
-    )
-    
-    if dfmq is not None and mode_rut_pct is not None:
-        # bottom margin already reserves space for the horizontal legend
-        fig.add_annotation(
-            text=f"ΔFMQ {dfmq:+.2f} | rt: {mode_rut_pct:.2f}%",
-            xref="paper",
-            yref="paper",
-            x=1.0,
-            y=1.06,
-            xanchor="right",
-            yanchor="bottom",
-            font=dict(size=10, color='black'),
-            showarrow=False
-        )
-    
-    return fig
-
-
-def create_fractionation_plot_vs_cemo(
-    title: str = "δ⁹⁸/⁹⁵Mo vs Ce/Mo (Cumulative Extracted Fluid)",
-    log_x: bool = True,
-    arc_df: Optional[pd.DataFrame] = None,
-    style_df: Optional[pd.DataFrame] = None,
-    arc_settings: Optional[Dict] = None,
-    dfmq: float = None,
-    mode_rut_pct: float = None
-) -> go.Figure:
-    """Create plot of δ⁹⁸/⁹⁵Mo vs Ce/Mo (cumulative fluid) for all alphas."""
-
-    fig = go.Figure()
-
-
-    if ARC_OVERLAY_AVAILABLE and arc_df is not None and not arc_df.empty:
-        if arc_settings is None:
-            arc_settings = {'color_by': 'Arc', 'symbol_by': 'Arc', 'show_error_bars': True,
-                            'show_labels': False, 'legend_by': 'Arc', 'filters': {}}
-        fig = add_arc_overlay_to_figure(
-            fig=fig, arc_df=arc_df, style_df=style_df,
-            x_col='Ce_Mo', y_col='d98Mo',
-            x_err_col='Ce_Mo_err' if arc_settings.get('show_error_bars', True) else None,
-            y_err_col='d98Mo_2SE' if arc_settings.get('show_error_bars', True) else None,
-            color_by=arc_settings.get('color_by', 'Arc'),
-            symbol_by=arc_settings.get('symbol_by', 'Arc'),
-            show_error_bars=arc_settings.get('show_error_bars', True),
-            show_labels=arc_settings.get('show_labels', False),
-            legend_by=arc_settings.get('legend_by', 'Arc'),
-            filters=arc_settings.get('filters', {})
-        )
-
-
-    fig.update_layout(
-        title=dict(text=title, font=dict(size=14, color='black', family='Arial'), x=0.4, xanchor='center'),
-        xaxis_title=dict(text='Ce/Mo (cumulative fluid)', font=dict(size=12, color='black')),
-        yaxis_title=dict(text='δ⁹⁸/⁹⁵Mo (‰, cumulative fluid)', font=dict(size=12, color='black')),
-        template='plotly_white', width=560, height=650,
-        margin=dict(l=60, r=40, t=50, b=150),
-        legend=dict(orientation="h", yanchor="top", y=-0.13, xanchor="left", x=0.0,
-                    bgcolor='rgba(0,0,0,0)', borderwidth=0, font=dict(color='black', size=9),
-                    tracegroupgap=1),
-        hovermode='closest',
-        xaxis=dict(type='log' if log_x else 'linear', autorange=True,
-                   showgrid=True, gridcolor='rgba(180,180,180,0.4)', gridwidth=1,
-                   showline=True, linecolor='black', linewidth=2, mirror=True,
-                   ticks='outside', ticklen=6, tickwidth=1, tickcolor='black',
-                   tickfont=dict(color='black', size=10), dtick=1 if log_x else None,
-                   minor=dict(ticks='outside', ticklen=3, showgrid=True, gridcolor='rgba(200,200,200,0.3)')),
-        yaxis=dict(autorange=True, showgrid=True, gridcolor='rgba(180,180,180,0.4)', gridwidth=1,
-                   showline=True, linecolor='black', linewidth=2, mirror=True,
-                   ticks='outside', ticklen=6, tickwidth=1, tickcolor='black',
-                   tickfont=dict(color='black', size=10), zeroline=False, dtick=0.2,
-                   minor=dict(ticks='outside', ticklen=3, showgrid=True, gridcolor='rgba(200,200,200,0.3)')),
-        plot_bgcolor='white', paper_bgcolor='white'
-    )
-
-    if dfmq is not None and mode_rut_pct is not None:
-        # bottom margin already reserves space for the horizontal legend
-        fig.add_annotation(
-            text=f"ΔFMQ {dfmq:+.2f} | rt: {mode_rut_pct:.2f}%",
-            xref="paper", yref="paper", x=1.0, y=1.06,
-            xanchor="right", yanchor="bottom",
-            font=dict(size=10, color='black'), showarrow=False
-        )
-
-    return fig
-
-
-def create_fractionation_plot_vs_nbla(
-    title: str = "δ⁹⁸/⁹⁵Mo vs Nb/La (Cumulative Extracted Fluid)",
-    log_x: bool = True,
-    arc_df: Optional[pd.DataFrame] = None,
-    style_df: Optional[pd.DataFrame] = None,
-    arc_settings: Optional[Dict] = None,
-    dfmq: float = None,
-    mode_rut_pct: float = None
-) -> go.Figure:
-    """Create plot of δ⁹⁸/⁹⁵Mo vs Nb/La (cumulative fluid) for all alphas."""
-
-    fig = go.Figure()
-
-
-    if ARC_OVERLAY_AVAILABLE and arc_df is not None and not arc_df.empty:
-        if arc_settings is None:
-            arc_settings = {'color_by': 'Arc', 'symbol_by': 'Arc', 'show_error_bars': True,
-                            'show_labels': False, 'legend_by': 'Arc', 'filters': {}}
-        fig = add_arc_overlay_to_figure(
-            fig=fig, arc_df=arc_df, style_df=style_df,
-            x_col='Nb_La', y_col='d98Mo',
-            x_err_col='Nb_La_err' if arc_settings.get('show_error_bars', True) else None,
-            y_err_col='d98Mo_2SE' if arc_settings.get('show_error_bars', True) else None,
-            color_by=arc_settings.get('color_by', 'Arc'),
-            symbol_by=arc_settings.get('symbol_by', 'Arc'),
-            show_error_bars=arc_settings.get('show_error_bars', True),
-            show_labels=arc_settings.get('show_labels', False),
-            legend_by=arc_settings.get('legend_by', 'Arc'),
-            filters=arc_settings.get('filters', {})
-        )
-
-
-    fig.update_layout(
-        title=dict(text=title, font=dict(size=14, color='black', family='Arial'), x=0.4, xanchor='center'),
-        xaxis_title=dict(text='Nb/La (cumulative fluid)', font=dict(size=12, color='black')),
-        yaxis_title=dict(text='δ⁹⁸/⁹⁵Mo (‰, cumulative fluid)', font=dict(size=12, color='black')),
-        template='plotly_white', width=560, height=650,
-        margin=dict(l=60, r=40, t=50, b=150),
-        legend=dict(orientation="h", yanchor="top", y=-0.13, xanchor="left", x=0.0,
-                    bgcolor='rgba(0,0,0,0)', borderwidth=0, font=dict(color='black', size=9),
-                    tracegroupgap=1),
-        hovermode='closest',
-        xaxis=dict(type='log' if log_x else 'linear', autorange=True,
-                   showgrid=True, gridcolor='rgba(180,180,180,0.4)', gridwidth=1,
-                   showline=True, linecolor='black', linewidth=2, mirror=True,
-                   ticks='outside', ticklen=6, tickwidth=1, tickcolor='black',
-                   tickfont=dict(color='black', size=10), dtick=1 if log_x else None,
-                   minor=dict(ticks='outside', ticklen=3, showgrid=True, gridcolor='rgba(200,200,200,0.3)')),
-        yaxis=dict(autorange=True, showgrid=True, gridcolor='rgba(180,180,180,0.4)', gridwidth=1,
-                   showline=True, linecolor='black', linewidth=2, mirror=True,
-                   ticks='outside', ticklen=6, tickwidth=1, tickcolor='black',
-                   tickfont=dict(color='black', size=10), zeroline=False, dtick=0.2,
-                   minor=dict(ticks='outside', ticklen=3, showgrid=True, gridcolor='rgba(200,200,200,0.3)')),
-        plot_bgcolor='white', paper_bgcolor='white'
-    )
-
-    if dfmq is not None and mode_rut_pct is not None:
-        # bottom margin already reserves space for the horizontal legend
-        fig.add_annotation(
-            text=f"ΔFMQ {dfmq:+.2f} | rt: {mode_rut_pct:.2f}%",
-            xref="paper", yref="paper", x=1.0, y=1.06,
-            xanchor="right", yanchor="bottom",
-            font=dict(size=10, color='black'), showarrow=False
-        )
-
-    return fig
-
-
-def create_fractionation_plot_vs_wce(
-    title: str = "δ⁹⁸/⁹⁵Mo vs W/Ce (Cumulative Extracted Fluid)",
-    log_x: bool = True,
-    arc_df: Optional[pd.DataFrame] = None,
-    style_df: Optional[pd.DataFrame] = None,
-    arc_settings: Optional[Dict] = None,
-    dfmq: float = None,
-    mode_rut_pct: float = None
-) -> go.Figure:
-    """Create plot of δ⁹⁸/⁹⁵Mo vs W/Ce (cumulative fluid) for all alphas.
-
-    W/Ce is fO2-independent (both W and Ce partition coefficients cancel in the
-    ratio at fixed conditions), making this a pure sediment-input diagnostic.
-    """
-
-    fig = go.Figure()
-
-
-    if ARC_OVERLAY_AVAILABLE and arc_df is not None and not arc_df.empty:
-        if arc_settings is None:
-            arc_settings = {'color_by': 'Arc', 'symbol_by': 'Arc', 'show_error_bars': True,
-                            'show_labels': False, 'legend_by': 'Arc', 'filters': {}}
-        # W_Ce is auto-computed by compute_ratios() in arc_data_overlay; no copy needed
-        fig = add_arc_overlay_to_figure(
-            fig=fig, arc_df=arc_df, style_df=style_df,
-            x_col='W_Ce', y_col='d98Mo',
-            x_err_col=None,
-            y_err_col='d98Mo_2SE' if arc_settings.get('show_error_bars', True) else None,
-            color_by=arc_settings.get('color_by', 'Arc'),
-            symbol_by=arc_settings.get('symbol_by', 'Arc'),
-            show_error_bars=arc_settings.get('show_error_bars', True),
-            show_labels=arc_settings.get('show_labels', False),
-            legend_by=arc_settings.get('legend_by', 'Arc'),
-            filters=arc_settings.get('filters', {})
-        )
-
-
-    fig.update_layout(
-        title=dict(text=title, font=dict(size=14, color='black', family='Arial'), x=0.4, xanchor='center'),
-        xaxis_title=dict(text='W/Ce (cumulative fluid)', font=dict(size=12, color='black')),
-        yaxis_title=dict(text='δ⁹⁸/⁹⁵Mo (‰, cumulative fluid)', font=dict(size=12, color='black')),
-        template='plotly_white', width=560, height=650,
-        margin=dict(l=60, r=40, t=50, b=150),
-        legend=dict(orientation="h", yanchor="top", y=-0.13, xanchor="left", x=0.0,
-                    bgcolor='rgba(0,0,0,0)', borderwidth=0, font=dict(color='black', size=9),
-                    tracegroupgap=1),
-        hovermode='closest',
-        xaxis=dict(type='log' if log_x else 'linear', autorange=True,
-                   showgrid=True, gridcolor='rgba(180,180,180,0.4)', gridwidth=1,
-                   showline=True, linecolor='black', linewidth=2, mirror=True,
-                   ticks='outside', ticklen=6, tickwidth=1, tickcolor='black',
-                   tickfont=dict(color='black', size=10), dtick=1 if log_x else None,
-                   minor=dict(ticks='outside', ticklen=3, showgrid=True, gridcolor='rgba(200,200,200,0.3)')),
-        yaxis=dict(autorange=True, showgrid=True, gridcolor='rgba(180,180,180,0.4)', gridwidth=1,
-                   showline=True, linecolor='black', linewidth=2, mirror=True,
-                   ticks='outside', ticklen=6, tickwidth=1, tickcolor='black',
-                   tickfont=dict(color='black', size=10), zeroline=False, dtick=0.2,
-                   minor=dict(ticks='outside', ticklen=3, showgrid=True, gridcolor='rgba(200,200,200,0.3)')),
-        plot_bgcolor='white', paper_bgcolor='white'
-    )
-
-    if dfmq is not None and mode_rut_pct is not None:
-        # bottom margin already reserves space for the horizontal legend
-        fig.add_annotation(
-            text=f"ΔFMQ {dfmq:+.2f} | rt: {mode_rut_pct:.2f}%",
-            xref="paper", yref="paper", x=1.0, y=1.06,
-            xanchor="right", yanchor="bottom",
-            font=dict(size=10, color='black'), showarrow=False
-        )
-
-    return fig
-
 
 def create_fractionation_plot_vs_mo(
     title: str = "δ⁹⁸/⁹⁵Mo vs Mo (Cumulative Extracted Fluid)",
@@ -1664,7 +704,7 @@ def create_fractionation_plot_vs_mo(
     fig = go.Figure()
 
 
-    if ARC_OVERLAY_AVAILABLE and arc_df is not None and not arc_df.empty:
+    if arc_df is not None and not arc_df.empty:
         if arc_settings is None:
             arc_settings = {'color_by': 'Arc', 'symbol_by': 'Arc', 'show_error_bars': True,
                             'show_labels': False, 'legend_by': 'Arc', 'filters': {}}
@@ -1702,19 +742,19 @@ def create_fractionation_plot_vs_mo(
     return fig
 
 
-# ── Stage colour scheme (fixed per task spec) ──────────────────────────────
+# ── Stage colour scheme ─────────────────────────────────────────────────────
 # Extraction (Stage 1, fluid GAINS Mo) = RED ; Reduction (Stage 2, fluid LOSES
 # Mo) = BLUE. Line style encodes protolith: Unmodified = solid, Modified = dashed.
 _STAGE_COLOR_EXTRACT = '#DC143C'   # red   (crimson)
 _STAGE_COLOR_REDUCE = '#1F5FBF'    # blue
 
-# Fallback colour cycle for Part2 segments outside the named regions
+# Fallback colour cycle for segments outside the named regions
 # (Nicaragua = '#0072B2', Costa Rica = '#D55E00') — Okabe–Ito, minus those two.
 _SEGMENT_COLORS = ['#009E73', '#CC79A7', '#E69F00', '#56B4E9', '#000000']
 
 
 def build_plot_line_table(fig: go.Figure) -> pd.DataFrame:
-    """Return paired numeric X/Y columns from the visible Part-2 model traces.
+    """Return paired numeric X/Y columns from the visible model traces.
 
     Preserve trace order and point order, including separate coordinates for
     every alpha. Missing trailing points are blank, never interpolated.
@@ -1853,11 +893,11 @@ def render_fluid_fractionation_section(
     """
     pass  # section title is given by the dashboard expander
 
-    # Part 2 is INDEPENDENT of Part 1 — driven entirely by the 'Part2_Segments' sheet.
+    # Driven entirely by the 'Part2_Segments' sheet.
     p2_segments = st.session_state.get('p2_segments') or []
     if not p2_segments:
         st.warning(
-            "**No Part-2 segments found.**\n\n"
+            "**No slab segments found.**\n\n"
             "Add a sheet named **'Part2_Segments'** to the input workbook (one row per slab "
             "segment: segment, P_bar, T_C, T_K, phi, ΔFMQ (log units), mode_grt/cpx/rut, "
             "C0_MO … C0_La, d98Mo, d98Mo 2SD, rock_id)."
@@ -1904,19 +944,11 @@ def render_fluid_fractionation_section(
         label_visibility="collapsed"
     )
     
-    # Update session state (no st.rerun — fragment auto-reruns on widget change)
     new_salinity = salinity_map[selected_label]
     st.session_state.ff_selected_salinity = new_salinity
     selected_salinity = new_salinity
     
-    # Checkbox to show/hide endmember markers in Part 2 plots
-    show_overlays = st.checkbox(
-        "Show endmembers on plots",
-        value=False,
-        key="ff_show_overlays"
-    )
-
-    # Toggle the φ (Zr-in-rutile) slab correction (Part 2 ONLY — never affects Part 1).
+    # Toggle the φ (Zr-in-rutile) slab correction.
     with st.expander("Model settings — φ correction, curve visibility, Stage-2 filter and isotope law", expanded=False):
         # φ is read per segment from the 'Part2_Segments' sheet (column `phi`).
         apply_phi600 = st.checkbox(
@@ -1927,8 +959,7 @@ def render_fluid_fractionation_section(
                 "ON: D = D(bracket at the segment's T_K) × φ(segment) — the φ value is read "
                 "from the 'Part2_Segments' sheet (column phi), computed from each segment's T_K. "
                 "OFF: uses the bracket coefficients without the φ mineral correction. "
-                "Applies to Part 2 only; Part 1 is never corrected."
-            )
+                )
         )
 
         # ── Two-stage / two-protolith display toggles ──────────────────────────
@@ -1969,7 +1000,7 @@ def render_fluid_fractionation_section(
         # buffer fO₂ (ΔFMQ_filter, e.g. graphite/CCO-class ≈ −0.5…−4); exit value is
         # rock-buffered, C_eq = C_rock/D_bulk(T, ΔFMQ_filter), clipped ≤ C_start (the
         # sediment never ADDS net Mo). The earlier proportional/saturation law was
-        # removed after the audit (fluid is ×600–1000 undersaturated; DEEP §19.4.0).
+        # (the fluid is ×600–1000 undersaturated, so a saturation law does not apply).
         rockF_Mo = st.number_input(
             "Filter rock Mo (ppm) — fallback for blank C0_MO_filter cells", min_value=0.0, max_value=50.0,
             value=3.96, step=0.01, format="%.2f", key="p2_rockF_Mo",
@@ -2015,28 +1046,26 @@ def render_fluid_fractionation_section(
         alpha_r_active_list = tuple(sorted(set(ALPHA_R_DEFAULT)
                                            | ({custom_ar} if custom_ar else set())))
 
-    # ── Arc Data Overlay (independent Part 2 panel — identical controls to Part 1) ──
-    # Uses its OWN settings (key_prefix='p2_') and renders inline (no nested expander).
-    if ARC_OVERLAY_AVAILABLE:
-        # Same lava data and colours as the Mo-W Thermodynamic model panels (data/arc_data.xlsx).
-        arc_df, _style_file, _arc_errs = load_arc_data_from_file()
-        _ARC_COL = {"Nicaragua": ("#fca9ff", "#9c329a"), "CostaRica": ("#93e65d", "#3a7a1e")}
-        _rows = []
-        if arc_df is not None and not arc_df.empty:
-            _grp_opacity = {}
-            if _style_file is not None and not _style_file.empty:
-                for _, _r in _style_file[_style_file["KeyType"].astype(str) == "Group"].iterrows():
-                    _grp_opacity[str(_r["Key"])] = float(_r.get("Opacity", 1.0))
-            for (_arc, _grp), _ in arc_df.groupby(["Arc", "Group"], dropna=False):
-                _fill, _line = _ARC_COL.get(str(_arc), ("#a0a0a0", "#555555"))
-                _rows.append({"KeyType": "Group", "Key": _grp, "Color": _fill, "Symbol": "circle", "Size": 9,
-                              "Opacity": _grp_opacity.get(str(_grp), 1.0), "OutlineColor": _line,
-                              "OutlineWidth": 1, "Visible": 1})
-        style_df = pd.DataFrame(_rows) if _rows else None
-        arc_settings = {"color_by": "Group", "symbol_by": "Group", "show_error_bars": True,
-                        "show_labels": False, "legend_by": "Arc", "filters": {}}
-    
-    # ── Slab Sediment Influence sliders (inside fragment for fast updates) ──
+    # ── Lava data overlay ──
+    # Same lava data and colours as the Mo-W Thermodynamic model panels (data/arc_data.xlsx).
+    arc_df, _style_file, _arc_errs = load_arc_data_from_file()
+    _ARC_COL = {"Nicaragua": ("#fca9ff", "#9c329a"), "CostaRica": ("#93e65d", "#3a7a1e")}
+    _rows = []
+    if arc_df is not None and not arc_df.empty:
+        _grp_opacity = {}
+        if _style_file is not None and not _style_file.empty:
+            for _, _r in _style_file[_style_file["KeyType"].astype(str) == "Group"].iterrows():
+                _grp_opacity[str(_r["Key"])] = float(_r.get("Opacity", 1.0))
+        for (_arc, _grp), _ in arc_df.groupby(["Arc", "Group"], dropna=False):
+            _fill, _line = _ARC_COL.get(str(_arc), ("#a0a0a0", "#555555"))
+            _rows.append({"KeyType": "Group", "Key": _grp, "Color": _fill, "Symbol": "circle", "Size": 9,
+                          "Opacity": _grp_opacity.get(str(_grp), 1.0), "OutlineColor": _line,
+                          "OutlineWidth": 1, "Visible": 1})
+    style_df = pd.DataFrame(_rows) if _rows else None
+    arc_settings = {"color_by": "Group", "symbol_by": "Group", "show_error_bars": True,
+                    "show_labels": False, "legend_by": "Arc", "filters": {}}
+
+    # ── Sediment-modified protolith sliders ──
     _p2s_col1, _p2s_col2 = st.columns(2)
     with _p2s_col1:
         sed_pct_val = st.slider(
@@ -2061,7 +1090,7 @@ def render_fluid_fractionation_section(
         n = str(nm).lower()
         return "Nicaragua" if "nicaragua" in n else ("Costa Rica" if "costa" in n else str(nm))
 
-    # ── Single active Part2_Segments source (checkbox table, same style as Part 1) ──
+    # ── Single active slab segment (checkbox table) ──
     _p2src_rows = []
     for _s in p2_segments:
         _c0 = _s.get('C0', {}) or {}
@@ -2108,7 +1137,7 @@ def render_fluid_fractionation_section(
         key="p2_src_editor",
         on_change=_p2_src_on_select,
         column_config={"Select": st.column_config.CheckboxColumn(
-            "✓", help="Active Part 2 source row", default=False, width="small")},
+            "✓", help="Active slab segment", default=False, width="small")},
         disabled=[c for c in _p2src_rows[0].keys() if c != "Select"] if _p2src_rows else [],
         hide_index=True,
         use_container_width=True,
@@ -2219,7 +1248,7 @@ def render_fluid_fractionation_section(
             return float(row[c].iloc[0]) if c in row.columns and pd.notna(row[c].iloc[0]) else None
         d = {k: g(k) for k in ('MO_Dbulk', 'CE_Dbulk', 'U_Dbulk', 'TH_Dbulk',
                                'W_Dbulk', 'NB_Dbulk', 'LA_Dbulk')}
-        # APPLY φ (Part 2 ONLY). The bracket was already evaluated at the segment's own T_K,
+        # Apply φ. The bracket was already evaluated at the segment's own T_K,
         # so the bracket and φ share the temperature. φ is the per-segment Excel value.
         # Mo: all minerals corrected. W: only CPX & GRT (fixed W_D_RUT = 1.250 uncorrected).
         if apply_phi600 and d['MO_Dbulk'] is not None:
@@ -2256,8 +1285,7 @@ def render_fluid_fractionation_section(
 
     def _seg_results_sed(seg, d):
         """Sediment-modified Rayleigh curves → (results_sed, delta0_sed, C0_sed)."""
-        if not (SEDIMENT_OVERLAY_AVAILABLE and sed_pct_val and carb_hemi_pct_val is not None
-                and sed_pct_val > 0):
+        if not (sed_pct_val and carb_hemi_pct_val is not None and sed_pct_val > 0):
             return None, None, None
         C0 = seg['C0']
         seg_d0 = seg['d98Mo'] if seg.get('d98Mo') is not None else delta0
@@ -2312,7 +1340,7 @@ def render_fluid_fractionation_section(
         segment's (φ-corrected) slab D rescaled analytically by the exact Bali
         fO₂ exponents: D_Mo×10^{−0.44Δ}; W silicate part ×10^{−0.07Δ} with the
         fixed rutile term preserved. Valid for dilute (undersaturated) fluids;
-        the earlier proportional/saturation law was removed (DEEP §19.4.0).
+        a saturation-limited law does not apply to this dilute fluid.
         Returns the FULL dict (all α_r) or None."""
         dfmq_filter = seg.get('dFMQ_filter')
         dfmq_slab = seg.get('dFMQ')
@@ -2361,7 +1389,7 @@ def render_fluid_fractionation_section(
         _phi_src = "from Excel" if seg.get('phi_from_excel') else "computed from T_K"
         if not seg.get('ready'):
             st.info(
-                f"ℹ️ **{seg['name']}** — φ = {seg['phi']:.4f} ({_phi_src}), "
+                f"**{seg['name']}** — φ = {seg['phi']:.4f} ({_phi_src}), "
                 f"T_K = {seg['T_K']:.2f} K. Fill P_bar, ΔFMQ, modal and C0 columns in the "
                 f"'Part2_Segments' sheet to plot this segment."
             )
@@ -2411,7 +1439,7 @@ def render_fluid_fractionation_section(
 
     if not seg_plot:
         st.info(
-            "ℹ️ No ready segments to plot yet. Fill P_bar, ΔFMQ, modal and C0 in the "
+            "No ready segments to plot yet. Fill P_bar, ΔFMQ, modal and C0 in the "
             "'Part2_Segments' sheet (φ and T_K are already set)."
         )
         return
@@ -2434,7 +1462,7 @@ def render_fluid_fractionation_section(
     mode_rut_pct = seg_plot[0]['mode_rut']
 
     # ========== 3×2 GRID OF PLOTS ==========
-    # Download config matching Part 1 (camera button on toolbar)
+    # Toolbar image-export settings
     _p2_dl_config = {
         'toImageButtonOptions': {
             'format': 'png',
@@ -2545,9 +1573,6 @@ def render_fluid_fractionation_section(
     # Default: only Plot D (δ⁹⁸/⁹⁵Mo vs Mo/W) and Plot H (δ⁹⁸/⁹⁵Mo vs Mo) are
     # computed and rendered. The other plots are OFF by default and are NOT
     # computed while hidden — this makes parameter changes much faster.
-    show_more_plots = False  # only the δ⁹⁸/⁹⁵Mo vs Mo plot is shown in the supplement
-    fig_mow = None
-
     _s0 = seg_plot[0]
     _fil = _s0.get('dfmq_filter')
     _info_lines = [
@@ -2572,113 +1597,6 @@ def render_fluid_fractionation_section(
         fig_mo = _draw_segment_curves(fig_mo, 'cf_cum_Mo')
         st.plotly_chart(fig_mo, use_container_width=False, config=_p2_dl_config, key="p2_plot_mo")
 
-    # Optional plots — not computed unless enabled
-    fig_moce = fig_uth = fig_wth = fig_cemo = fig_nbla = fig_wce = None
-    if show_more_plots:
-        # ROW 1: Plot A and Plot B
-        plot_row1_col1, plot_row1_col2 = st.columns(2)
-        with plot_row1_col1:
-            st.markdown("**Plot A: δ⁹⁸/⁹⁵Mo vs Mo/Ce**")
-        
-            fig_moce = create_fractionation_plot(
-                title=f"δ⁹⁸/⁹⁵Mo vs Mo/Ce (NaCl = {salinity:.3g} wt%)",
-                log_x=True,
-                arc_df=arc_df,
-                style_df=style_df,
-                arc_settings=arc_settings,
-                dfmq=dfmq_val,
-                mode_rut_pct=mode_rut_pct
-            )
-            if show_overlays and SEDIMENT_OVERLAY_AVAILABLE:
-                fig_moce = add_endmember_markers_xonly(fig_moce, "Mo_Ce")
-            fig_moce = _draw_segment_curves(fig_moce, 'MoCe_f_cum')
-            st.plotly_chart(fig_moce, use_container_width=False, config=_p2_dl_config, key="p2_plot_moce")
-        with plot_row1_col2:
-            st.markdown("**Plot B: δ⁹⁸/⁹⁵Mo vs U/Th**")
-        
-            fig_uth = create_fractionation_plot_vs_uth(
-                title=f"δ⁹⁸/⁹⁵Mo vs U/Th (NaCl = {salinity:.3g} wt%)",
-                log_x=True,
-                arc_df=arc_df,
-                style_df=style_df,
-                arc_settings=arc_settings,
-                dfmq=dfmq_val,
-                mode_rut_pct=mode_rut_pct
-            )
-            if show_overlays and SEDIMENT_OVERLAY_AVAILABLE:
-                fig_uth = add_endmember_markers_xonly(fig_uth, "U_Th")
-            fig_uth = _draw_segment_curves(fig_uth, 'UTh_f_cum')
-            st.plotly_chart(fig_uth, use_container_width=False, config=_p2_dl_config, key="p2_plot_uth")
-        # ROW 2: Plot C and Plot E
-        plot_row2_col1, plot_row2_col2 = st.columns(2)
-        with plot_row2_col1:
-            st.markdown("**Plot C: δ⁹⁸/⁹⁵Mo vs W/Th**")
-        
-            fig_wth = create_fractionation_plot_vs_wth(
-                title=f"δ⁹⁸/⁹⁵Mo vs W/Th (NaCl = {salinity:.3g} wt%)",
-                log_x=True,
-                arc_df=arc_df,
-                style_df=style_df,
-                arc_settings=arc_settings,
-                dfmq=dfmq_val,
-                mode_rut_pct=mode_rut_pct
-            )
-            if show_overlays and SEDIMENT_OVERLAY_AVAILABLE:
-                fig_wth = add_endmember_markers_xonly(fig_wth, "W_Th")
-            fig_wth = _draw_segment_curves(fig_wth, 'WTh_f_cum')
-            st.plotly_chart(fig_wth, use_container_width=False, config=_p2_dl_config, key="p2_plot_wth")
-        with plot_row2_col2:
-            st.markdown("**Plot E: δ⁹⁸/⁹⁵Mo vs Ce/Mo**")
-        
-            fig_cemo = create_fractionation_plot_vs_cemo(
-                title=f"δ⁹⁸/⁹⁵Mo vs Ce/Mo (NaCl = {salinity:.3g} wt%)",
-                log_x=True,
-                arc_df=arc_df,
-                style_df=style_df,
-                arc_settings=arc_settings,
-                dfmq=dfmq_val,
-                mode_rut_pct=mode_rut_pct
-            )
-            if show_overlays and SEDIMENT_OVERLAY_AVAILABLE:
-                fig_cemo = add_endmember_markers_xonly(fig_cemo, "Ce_Mo")
-            fig_cemo = _draw_segment_curves(fig_cemo, 'CeMo_f_cum')
-            st.plotly_chart(fig_cemo, use_container_width=False, config=_p2_dl_config, key="p2_plot_cemo")
-        # ROW 3: Plot F and Plot G
-        plot_row3_col1, plot_row3_col2 = st.columns(2)
-        with plot_row3_col1:
-            st.markdown("**Plot F: δ⁹⁸/⁹⁵Mo vs Nb/La**")
-        
-            fig_nbla = create_fractionation_plot_vs_nbla(
-                title=f"δ⁹⁸/⁹⁵Mo vs Nb/La (NaCl = {salinity:.3g} wt%)",
-                log_x=True,
-                arc_df=arc_df,
-                style_df=style_df,
-                arc_settings=arc_settings,
-                dfmq=dfmq_val,
-                mode_rut_pct=mode_rut_pct
-            )
-            if show_overlays and SEDIMENT_OVERLAY_AVAILABLE:
-                fig_nbla = add_endmember_markers_xonly(fig_nbla, "Nb_La")
-            fig_nbla = _draw_segment_curves(fig_nbla, 'NbLa_f_cum')
-            st.plotly_chart(fig_nbla, use_container_width=False, config=_p2_dl_config, key="p2_plot_nbla")
-        with plot_row3_col2:
-            st.markdown("**Plot G: δ⁹⁸/⁹⁵Mo vs W/Ce**")
-
-            fig_wce = create_fractionation_plot_vs_wce(
-                title=f"δ⁹⁸/⁹⁵Mo vs W/Ce (NaCl = {salinity:.3g} wt%)",
-                log_x=True,
-                arc_df=arc_df,
-                style_df=style_df,
-                arc_settings=arc_settings,
-                dfmq=dfmq_val,
-                mode_rut_pct=mode_rut_pct
-            )
-            if show_overlays and SEDIMENT_OVERLAY_AVAILABLE:
-                fig_wce = add_endmember_markers_xonly(fig_wce, "W_Ce")
-            fig_wce = _draw_segment_curves(fig_wce, 'WCe_f_cum')
-            st.plotly_chart(fig_wce, use_container_width=False, config=_p2_dl_config, key="p2_plot_wce")
-
-    # A collapsed expander still executes its body on every fragment rerun.
     if st.button("Prepare figure downloads (PNG 300 dpi + SVG vector)",
                  key="p2_prepare_figure_downloads"):
         st.caption("Export plots as PNG (1500×1500 px ≈ 300 dpi at 5 inch) or SVG (scalable vector).")
@@ -2693,7 +1611,7 @@ def render_fluid_fractionation_section(
                 st.download_button(
                     label="PNG (Mo)",
                     data=png_mo,
-                    file_name=f"fluid_d98Mo_vs_Mo.png",
+                    file_name="two_stage_model_d98Mo_vs_Mo.png",
                     mime="image/png",
                     key="dl_mo_png",
                     use_container_width=True
@@ -2707,7 +1625,7 @@ def render_fluid_fractionation_section(
                 st.download_button(
                     label="SVG (Mo)",
                     data=svg_mo,
-                    file_name=f"fluid_d98Mo_vs_Mo.svg",
+                    file_name="two_stage_model_d98Mo_vs_Mo.svg",
                     mime="image/svg+xml",
                     key="dl_mo_svg",
                     use_container_width=True
@@ -2715,202 +1633,8 @@ def render_fluid_fractionation_section(
             except Exception as e:
                 st.error(f"SVG export error: {str(e)[:100]}")
 
-        # Optional plots — only when 'Show additional plots' is enabled
-        if show_more_plots:
-            st.markdown("**Plot A: δ⁹⁸/⁹⁵Mo vs Mo/Ce**")
-            dl_col1a, dl_col1b = st.columns(2)
-        
-            with dl_col1a:
-                try:
-                    png_moce = fig_moce.to_image(format="png", width=1500, height=1500, scale=1)
-                    st.download_button(
-                        label="PNG (Mo/Ce)",
-                        data=png_moce,
-                        file_name=f"fluid_d98Mo_vs_MoCe.png",
-                        mime="image/png",
-                        key="dl_moce_png",
-                        use_container_width=True
-                    )
-                except Exception as e:
-                    st.error(f"PNG export error: {str(e)[:100]}")
-        
-            with dl_col1b:
-                try:
-                    svg_moce = fig_moce.to_image(format="svg", width=560, height=650)
-                    st.download_button(
-                        label="SVG (Mo/Ce)",
-                        data=svg_moce,
-                        file_name=f"fluid_d98Mo_vs_MoCe.svg",
-                        mime="image/svg+xml",
-                        key="dl_moce_svg",
-                        use_container_width=True
-                    )
-                except Exception as e:
-                    st.error(f"SVG export error: {str(e)[:100]}")
-
-            st.markdown("**Plot B: δ⁹⁸/⁹⁵Mo vs U/Th**")
-            dl_col2a, dl_col2b = st.columns(2)
-        
-            with dl_col2a:
-                try:
-                    png_uth = fig_uth.to_image(format="png", width=1500, height=1500, scale=1)
-                    st.download_button(
-                        label="PNG (U/Th)",
-                        data=png_uth,
-                        file_name=f"fluid_d98Mo_vs_UTh.png",
-                        mime="image/png",
-                        key="dl_uth_png",
-                        use_container_width=True
-                    )
-                except Exception as e:
-                    st.error(f"PNG export error: {str(e)[:100]}")
-        
-            with dl_col2b:
-                try:
-                    svg_uth = fig_uth.to_image(format="svg", width=560, height=650)
-                    st.download_button(
-                        label="SVG (U/Th)",
-                        data=svg_uth,
-                        file_name=f"fluid_d98Mo_vs_UTh.svg",
-                        mime="image/svg+xml",
-                        key="dl_uth_svg",
-                        use_container_width=True
-                    )
-                except Exception as e:
-                    st.error(f"SVG export error: {str(e)[:100]}")
-
-            st.markdown("**Plot C: δ⁹⁸/⁹⁵Mo vs W/Th**")
-            dl_col3a, dl_col3b = st.columns(2)
-        
-            with dl_col3a:
-                try:
-                    png_wth = fig_wth.to_image(format="png", width=1500, height=1500, scale=1)
-                    st.download_button(
-                        label="PNG (W/Th)",
-                        data=png_wth,
-                        file_name=f"fluid_d98Mo_vs_WTh.png",
-                        mime="image/png",
-                        key="dl_wth_png",
-                        use_container_width=True
-                    )
-                except Exception as e:
-                    st.error(f"PNG export error: {str(e)[:100]}")
-        
-            with dl_col3b:
-                try:
-                    svg_wth = fig_wth.to_image(format="svg", width=560, height=650)
-                    st.download_button(
-                        label="SVG (W/Th)",
-                        data=svg_wth,
-                        file_name=f"fluid_d98Mo_vs_WTh.svg",
-                        mime="image/svg+xml",
-                        key="dl_wth_svg",
-                        use_container_width=True
-                    )
-                except Exception as e:
-                    st.error(f"SVG export error: {str(e)[:100]}")
-
-            st.markdown("**Plot E: δ⁹⁸/⁹⁵Mo vs Ce/Mo**")
-            dl_col5a, dl_col5b = st.columns(2)
-        
-            with dl_col5a:
-                try:
-                    png_cemo = fig_cemo.to_image(format="png", width=1500, height=1500, scale=1)
-                    st.download_button(
-                        label="PNG (Ce/Mo)",
-                        data=png_cemo,
-                        file_name=f"fluid_d98Mo_vs_CeMo.png",
-                        mime="image/png",
-                        key="dl_cemo_png",
-                        use_container_width=True
-                    )
-                except Exception as e:
-                    st.error(f"PNG export error: {str(e)[:100]}")
-        
-            with dl_col5b:
-                try:
-                    svg_cemo = fig_cemo.to_image(format="svg", width=560, height=650)
-                    st.download_button(
-                        label="SVG (Ce/Mo)",
-                        data=svg_cemo,
-                        file_name=f"fluid_d98Mo_vs_CeMo.svg",
-                        mime="image/svg+xml",
-                        key="dl_cemo_svg",
-                        use_container_width=True
-                    )
-                except Exception as e:
-                    st.error(f"SVG export error: {str(e)[:100]}")
-
-            st.markdown("**Plot F: δ⁹⁸/⁹⁵Mo vs Nb/La**")
-            dl_col6a, dl_col6b = st.columns(2)
-        
-            with dl_col6a:
-                try:
-                    png_nbla = fig_nbla.to_image(format="png", width=1500, height=1500, scale=1)
-                    st.download_button(
-                        label="PNG (Nb/La)",
-                        data=png_nbla,
-                        file_name=f"fluid_d98Mo_vs_NbLa.png",
-                        mime="image/png",
-                        key="dl_nbla_png",
-                        use_container_width=True
-                    )
-                except Exception as e:
-                    st.error(f"PNG export error: {str(e)[:100]}")
-        
-            with dl_col6b:
-                try:
-                    svg_nbla = fig_nbla.to_image(format="svg", width=560, height=650)
-                    st.download_button(
-                        label="SVG (Nb/La)",
-                        data=svg_nbla,
-                        file_name=f"fluid_d98Mo_vs_NbLa.svg",
-                        mime="image/svg+xml",
-                        key="dl_nbla_svg",
-                        use_container_width=True
-                    )
-                except Exception as e:
-                    st.error(f"SVG export error: {str(e)[:100]}")
-
-            st.markdown("**Plot G: δ⁹⁸/⁹⁵Mo vs W/Ce**")
-            dl_col7a, dl_col7b = st.columns(2)
-
-            with dl_col7a:
-                try:
-                    png_wce = fig_wce.to_image(format="png", width=1500, height=1500, scale=1)
-                    st.download_button(
-                        label="PNG (W/Ce)",
-                        data=png_wce,
-                        file_name=f"fluid_d98Mo_vs_WCe.png",
-                        mime="image/png",
-                        key="dl_wce_png",
-                        use_container_width=True
-                    )
-                except Exception as e:
-                    st.error(f"PNG export error: {str(e)[:100]}")
-
-            with dl_col7b:
-                try:
-                    svg_wce = fig_wce.to_image(format="svg", width=560, height=650)
-                    st.download_button(
-                        label="SVG (W/Ce)",
-                        data=svg_wce,
-                        file_name=f"fluid_d98Mo_vs_WCe.svg",
-                        mime="image/svg+xml",
-                        key="dl_wce_svg",
-                        use_container_width=True
-                    )
-                except Exception as e:
-                    st.error(f"SVG export error: {str(e)[:100]}")
-
-    # ========== PARAMETERS & TABLES (active source) ==========
-    _rep = seg_plot[0]   # single active Part2_Segments source
-    results = _rep['results']
-    _repC0, _repD = _rep['C0'], _rep['dbulk']
-    C0_MO, C0_Ce = _repC0.get('MO'), _repC0.get('Ce')
-    C0_U, C0_Th, C0_W = _repC0.get('U'), _repC0.get('Th'), _repC0.get('W')
-    MO_Dbulk, CE_Dbulk = _repD['MO_Dbulk'], _repD['CE_Dbulk']
-    U_Dbulk, TH_Dbulk, W_Dbulk = _repD['U_Dbulk'], _repD['TH_Dbulk'], _repD['W_Dbulk']
+    # ── Parameters and tables of the active segment ──
+    _rep = seg_plot[0]   # active slab segment
     delta0 = _rep['d98Mo'] if _rep.get('d98Mo') is not None else delta0
 
     _line_table = build_plot_line_table(fig_mo)
@@ -2928,7 +1652,7 @@ def render_fluid_fractionation_section(
     # ========== DETAILED CALCULATION TABLES ==========
     # Four tables for the active source: {Unmodified, Modified} × {Extraction,
     # Reduction}. Each table has ONE column per α (all α included, even hidden
-    # ones). Recomputed live on every slider / checkbox change (inside fragment).
+    # ones). Recomputed on every slider / checkbox change.
     st.markdown("#### Detailed Calculation Tables")
     st.caption("Active source: "
                f"**{_rep['name']}** (row {_rep.get('row')}, {_rep.get('protolith','')}). "
@@ -3001,7 +1725,7 @@ def render_fluid_fractionation_section(
 
     for _gi, (_gname, _rdict, _pcol) in enumerate(_tbl_groups):
         _tbl = _stage_table(_rdict, _pcol)
-        with st.expander(f"📄 {_gname}", expanded=(_gi == 0)):
+        with st.expander(f" {_gname}", expanded=(_gi == 0)):
             if _tbl is None or _tbl.empty:
                 st.info("No data for this protolith × stage at the current settings.")
                 continue
@@ -3103,65 +1827,10 @@ def render_fluid_fractionation_section(
                     mime="text/tab-separated-values",
                     key=f"p2_stage2_tsv_{_rep.get('row')}_{_gi}",
                 )
-                with st.expander("Copy/paste tab-separated values with audit parameters"):
+                with st.expander("Copy/paste tab-separated values with model parameters"):
                     st.caption(
                         "Copy the tab-delimited text from the code block, or use the "
                         "download button above. It contains full-precision model outputs "
                         "and the fixed inputs repeated on every row."
                     )
                     st.code(_tsv, language=None)
-
-
-# ============================================================================
-# STANDALONE DEMO / TESTING
-# ============================================================================
-
-def demo_fluid_fractionation():
-    """
-    Demo function for testing the module independently.
-    Uses example Bali parameters including U, Th, and W.
-    """
-    # Example parameters (typical Depleted Mantle values)
-    # These would normally come from the Bali model results
-    example_params = {
-        'C0_MO': 0.025,      # ppm, DM Mo concentration
-        'C0_Ce': 0.772,      # ppm, DM Ce concentration
-        'C0_U': 0.0047,      # ppm, DM U concentration
-        'C0_Th': 0.0137,     # ppm, DM Th concentration
-        'C0_W': 0.0024,      # ppm, DM W concentration
-        'MO_Dbulk': 0.0015,  # Example bulk D for Mo (rock/fluid)
-        'CE_Dbulk': 1.52,    # Example bulk D for Ce (rock/fluid)
-        'U_Dbulk': 0.0008,   # Example bulk D for U (rock/fluid)
-        'TH_Dbulk': 0.0012,  # Example bulk D for Th (rock/fluid)
-        'W_Dbulk': 0.0010,   # Example bulk D for W (rock/fluid)
-    }
-    
-    print("=" * 60)
-    print("Fluid Fractionation Model - Demo (with U, Th, and W)")
-    print("=" * 60)
-    print(f"C0_MO = {example_params['C0_MO']} ppm")
-    print(f"C0_Ce = {example_params['C0_Ce']} ppm")
-    print(f"C0_U = {example_params['C0_U']} ppm")
-    print(f"C0_Th = {example_params['C0_Th']} ppm")
-    print(f"C0_W = {example_params['C0_W']} ppm")
-    print(f"MO_Dbulk = {example_params['MO_Dbulk']}")
-    print(f"CE_Dbulk = {example_params['CE_Dbulk']}")
-    print(f"U_Dbulk = {example_params['U_Dbulk']}")
-    print(f"TH_Dbulk = {example_params['TH_Dbulk']}")
-    print(f"W_Dbulk = {example_params['W_Dbulk']}")
-    print(f"delta0 = -0.21‰")
-    print()
-    
-    results = compute_fluid_fractionation(**example_params)
-    
-    for alpha, df in results.items():
-        print(f"\n--- Results for α = {alpha} ---")
-        print(df.to_string(index=False, float_format='{:.6f}'.format))
-        print()
-    
-    return results
-
-
-if __name__ == "__main__":
-    # Run demo when executed directly
-    demo_fluid_fractionation()

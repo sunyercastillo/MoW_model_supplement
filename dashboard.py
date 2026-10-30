@@ -2,10 +2,10 @@
 """
 Interactive supplement: Mo–W systematics of subduction-zone fluids.
 
-Part 1 — Mo-W Thermodynamic model (Bali et al. 2011, 2012 fluid–mineral partitioning):
+Mo-W Thermodynamic model (Bali et al. 2011, 2012 fluid–mineral partitioning):
     three sensitivity grids in Mo/W space — residual rutile, fluid salinity and
     sediment addition — drawn as ΔFMQ bands with constant-parameter isopleths.
-Part 2 — Two-stage fractionation model (two_stage_model/).
+Two-stage fractionation model: Rayleigh slab dehydration followed by a redox filter.
 
 Run:  streamlit run dashboard.py   (or ./launch_dashboard.sh)
 """
@@ -13,12 +13,12 @@ Run:  streamlit run dashboard.py   (or ./launch_dashboard.sh)
 import os
 import math
 
-import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from thermodynamic_model.model import Model, MODEL_INPUTS_XLSX, param_tag, dg_table, tsv_text, grid_dataframe_rows
+from thermodynamic_model.model import (Model, MODEL_INPUTS_XLSX, param_tag, dg_table, tsv_text, grid_dataframe_rows,
+                                       write_model_inputs_template)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ARC_XLSX = os.path.join(HERE, "data", "arc_data.xlsx")
@@ -156,8 +156,8 @@ def panel(column, fig, headers, cols, grid_rows, param_label, file_stub, key):
         c1, c2 = st.columns(2)
         c1.download_button("Plotted XY pairs (TSV)", tsv_text(headers, cols), file_name=f"{file_stub}.txt",
                            mime="text/tab-separated-values", key=f"dl_xy_{key}",
-                           help="Same column structure as the DataGraph tables of the supplement: FMQ curves, "
-                                "Band1–5 polygons with Band_mask, and the dashed isopleths.")
+                           help="FMQ curves, Band1–5 polygons with Band_mask, and the dashed isopleths — "
+                                "the DataGraph layout used for the article figure.")
         full = pd.DataFrame(grid_dataframe_rows(grid_rows, param_label))
         c2.download_button("Full calculation table (CSV)", full.to_csv(index=False), file_name=f"{file_stub}_full.csv",
                            mime="text/csv", key=f"dl_full_{key}")
@@ -168,7 +168,8 @@ def panel(column, fig, headers, cols, grid_rows, param_label, file_stub, key):
 # ──────────────────────────────────────────────────────────────────────────────
 st.title("Mo–W systematics of subduction-zone fluids — forward models")
 
-m = model(os.path.getmtime(MODEL_INPUTS_XLSX) if os.path.exists(MODEL_INPUTS_XLSX) else 0)
+write_model_inputs_template()   # restores data/model_inputs.xlsx from the defaults if it was deleted
+m = model(os.path.getmtime(MODEL_INPUTS_XLSX))
 c = m.c
 arc_mtime = os.path.getmtime(ARC_XLSX) if os.path.exists(ARC_XLSX) else 0
 
@@ -252,5 +253,5 @@ with st.expander("Two-stage fractionation model", expanded=False):
     try:
         from two_stage_model.bridge import render_two_stage_model
         render_two_stage_model()
-    except Exception as e:  # keep Part 1 usable if Part 2 fails
+    except Exception as e:  # keep the first model usable if the second fails
         st.error(f"Two-stage fractionation model could not be rendered: {e}")

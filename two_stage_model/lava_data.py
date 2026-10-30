@@ -1,29 +1,13 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
-Arc Data Overlay Module for Bali et al. (2012) Dashboard
-=========================================================
-
-Provides functionality to overlay real arc geochemical data on model plots.
-Reads arc data from Excel file in the project folder (arc_data.xlsx).
-Computes element ratios internally from raw ppm concentrations.
-
-Author: Arc Data Extension
-Date: January 2026
+Lava data overlay: reads data/arc_data.xlsx (ArcData and Style sheets),
+validates it, computes element ratios and draws the samples on Plotly figures.
 """
 
 import os
-import contextlib
 import numpy as np
 import pandas as pd
-import streamlit as st
 import plotly.graph_objects as go
-from typing import Dict, List, Tuple, Optional, Any
-import warnings
-
-# ============================================================================
-# DEFAULT STYLING
-# ============================================================================
+from typing import Dict, List, Tuple, Optional
 
 # Default color palette for arcs (Plotly categorical colors)
 DEFAULT_COLORS = [
@@ -52,9 +36,7 @@ NUMERIC_COLUMNS = [
 ARC_DATA_FILENAME = 'arc_data.xlsx'
 
 
-# ============================================================================
-# DATA LOADING AND VALIDATION
-# ============================================================================
+# Data loading and validation
 
 def load_arc_data_from_file(file_path: str = None) -> Tuple[Optional[pd.DataFrame], Optional[pd.DataFrame], List[str]]:
     """
@@ -259,9 +241,7 @@ def compute_ratios(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-# ============================================================================
-# STYLING FUNCTIONS
-# ============================================================================
+# Styling functions
 
 def get_style_for_sample(sample: pd.Series, style_df: Optional[pd.DataFrame], 
                          color_by: str = 'Arc', symbol_by: str = 'Arc',
@@ -303,8 +283,6 @@ def get_style_for_sample(sample: pd.Series, style_df: Optional[pd.DataFrame],
     
     # Try to find style in style_df
     if style_df is not None and not style_df.empty:
-        # First try exact match for color_by key
-        color_key = arc_key if color_by == 'Arc' else group_key
         symbol_key = arc_key if symbol_by == 'Arc' else (group_key if symbol_by == 'Group' else None)
         
         # Look for color match
@@ -392,9 +370,7 @@ def build_default_styles(arc_df: pd.DataFrame, style_df: Optional[pd.DataFrame])
     return default_styles
 
 
-# ============================================================================
-# PLOTTING FUNCTIONS
-# ============================================================================
+# Plotting functions
 
 def add_arc_overlay_to_figure(
     fig: go.Figure,
@@ -575,202 +551,3 @@ def add_arc_overlay_to_figure(
                 ))
     
     return fig
-
-
-def get_plot_summary(arc_df: pd.DataFrame) -> Dict:
-    """
-    Get summary of which plots can show arc data.
-    """
-    if arc_df is None or arc_df.empty:
-        return {}
-    
-    plots = {
-        'Mo/Ce vs U/Th': ('Mo_Ce', 'U_Th'),
-        'W/Th vs U/Th': ('W_Th', 'U_Th'),
-        'Mo/W vs U/Th': ('Mo_W', 'U_Th'),
-        'Mo/W vs Nb/La': ('Mo_W', 'Nb_La'),
-        'δ98Mo vs Mo/Ce': ('Mo_Ce', 'd98Mo')
-    }
-    
-    summary = {}
-    for plot_name, (x_col, y_col) in plots.items():
-        valid_count = arc_df[x_col].notna() & arc_df[y_col].notna()
-        summary[plot_name] = {
-            'x_col': x_col,
-            'y_col': y_col,
-            'valid_samples': valid_count.sum(),
-            'total_samples': len(arc_df)
-        }
-    
-    return summary
-
-
-# ============================================================================
-# STREAMLIT UI COMPONENTS
-# ============================================================================
-
-def render_arc_data_upload_section(expanded: bool = False, key_prefix: str = "",
-                                   use_expander: bool = True) -> Tuple[Optional[pd.DataFrame], Optional[pd.DataFrame], Dict]:
-    """
-    Render the arc data overlay section in Streamlit.
-    Automatically loads arc data from 'arc_data.xlsx' in the project folder.
-
-    Parameters
-    ----------
-    expanded : bool
-        Whether the expander should be open by default (default False)
-    key_prefix : str
-        Prefix applied to every widget key and to the settings session-state key, so the
-        panel can be rendered independently in more than one place (e.g. Part 1 and Part 2).
-    use_expander : bool
-        Wrap the controls in a "Lava data overlay" expander (True) or render them inline
-        with a markdown header (False — use inside another expander to avoid nesting errors).
-
-    Returns
-    -------
-    tuple
-        (arc_df, style_df, settings_dict)
-    """
-    _sk = f"{key_prefix}arc_settings"  # per-panel settings key (data itself is shared)
-
-    # Initialize session state for arc data (arc_df / style_df / loaded flag are shared)
-    if 'arc_df' not in st.session_state:
-        st.session_state.arc_df = None
-    if 'style_df' not in st.session_state:
-        st.session_state.style_df = None
-    if _sk not in st.session_state:
-        st.session_state[_sk] = {
-            'color_by': 'Group',
-            'symbol_by': 'Group',
-            'show_error_bars': True,
-            'show_labels': False,
-            'legend_by': 'Group',
-            'filters': {}
-        }
-    if 'arc_data_loaded' not in st.session_state:
-        st.session_state.arc_data_loaded = False
-
-    arc_df = None
-    style_df = None
-    settings = st.session_state[_sk].copy()
-
-    # Load arc data from file (only once per session or on reload)
-    if not st.session_state.arc_data_loaded:
-        arc_df, style_df, warnings = load_arc_data_from_file()
-
-        if arc_df is not None and not arc_df.empty:
-            st.session_state.arc_df = arc_df
-            st.session_state.style_df = style_df
-            st.session_state.arc_data_loaded = True
-        else:
-            st.session_state.arc_data_loaded = True  # Mark as checked even if no file
-
-    # Get data from session state
-    arc_df = st.session_state.arc_df
-    style_df = st.session_state.style_df
-
-    # Container: an expander, or an inline block (to avoid nested-expander errors)
-    _box = st.expander("Lava data overlay", expanded=expanded) if use_expander else contextlib.nullcontext()
-    with _box:
-        if not use_expander:
-            st.markdown("**Lava data overlay**")
-        # Reload button
-        col_reload, col_info = st.columns([1, 3])
-        with col_reload:
-            if st.button("🔄 Reload", key=f"{key_prefix}reload_arc_data"):
-                st.session_state.arc_data_loaded = False
-                st.rerun()
-        with col_info:
-            st.caption("Reads from `arc_data.xlsx`")
-
-        if arc_df is None or arc_df.empty:
-            st.info(
-                "📁 **No arc data file found.**\n\n"
-                "Create `arc_data.xlsx` with ArcData sheet."
-            )
-            return None, None, settings
-
-        # Show data summary
-        st.success(f"✅ {len(arc_df)} arc samples loaded")
-
-        # Settings in compact layout
-        col1, col2 = st.columns(2)
-
-        with col1:
-            settings['color_by'] = st.radio(
-                "Color by:",
-                options=['Arc', 'Group'],
-                index=0 if settings['color_by'] == 'Arc' else 1,
-                key=f'{key_prefix}arc_color_by',
-                horizontal=True,
-                label_visibility='collapsed'
-            )
-            st.caption("Color by")
-            settings['show_error_bars'] = st.checkbox(
-                "Show error bars",
-                value=settings['show_error_bars'],
-                key=f'{key_prefix}arc_show_errors'
-            )
-
-        with col2:
-            symbol_options = ['Arc', 'Group', 'None']
-            settings['symbol_by'] = st.radio(
-                "Symbol by:",
-                options=symbol_options,
-                index=symbol_options.index(settings['symbol_by']) if settings['symbol_by'] in symbol_options else 1,
-                key=f'{key_prefix}arc_symbol_by',
-                horizontal=True,
-                label_visibility='collapsed'
-            )
-            st.caption("Symbol by")
-            settings['show_labels'] = st.checkbox(
-                "Show labels",
-                value=settings['show_labels'],
-                key=f'{key_prefix}arc_show_labels'
-            )
-
-        settings['legend_by'] = st.radio(
-            "Legend by:",
-            options=['Arc', 'Group'],
-            index=0 if settings['legend_by'] == 'Arc' else 1,
-            key=f'{key_prefix}arc_legend_by',
-            horizontal=True,
-            label_visibility='collapsed'
-        )
-        st.caption("Legend by")
-
-        # Filters in nested expander
-        with st.expander("🔍 Filter Data", expanded=False):
-            filter_col1, filter_col2 = st.columns(2)
-
-            with filter_col1:
-                arcs = arc_df['Arc'].dropna().unique().tolist()
-                selected_arcs = st.multiselect(
-                    "Filter by Arc:",
-                    options=arcs,
-                    default=arcs,
-                    key=f'{key_prefix}arc_filter_arc'
-                )
-                if selected_arcs and len(selected_arcs) < len(arcs):
-                    settings['filters']['Arc'] = selected_arcs
-                elif 'Arc' in settings['filters']:
-                    del settings['filters']['Arc']
-
-            with filter_col2:
-                groups = [g for g in arc_df['Group'].dropna().unique().tolist() if g]
-                if groups:
-                    selected_groups = st.multiselect(
-                        "Filter by Group:",
-                        options=groups,
-                        default=groups,
-                        key=f'{key_prefix}arc_filter_group'
-                    )
-                    if selected_groups and len(selected_groups) < len(groups):
-                        settings['filters']['Group'] = selected_groups
-                    elif 'Group' in settings['filters']:
-                        del settings['filters']['Group']
-
-    # Update session state
-    st.session_state[_sk] = settings
-
-    return arc_df, style_df, settings

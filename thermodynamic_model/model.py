@@ -89,7 +89,7 @@ SED_WT = [0, 1, 2.5, 5, 10]
 RUT_WT = [0, 0.25, 0.5, 1, 2.5, 3.5, 5]
 NACL_WT = [1, 3, 5, 10, 15, 20]
 
-# Check values supplied with the task (generated with Mo_a = 0.435, see audit)
+# Check values of the manuscript grid table at ΔFMQ 0 (computed with Mo_a = 0.435; see docs/audit)
 TARGETS_DFMQ0 = {
     # sed wt% : (carb U/Th, carb Mo/W, 6040 U/Th, 6040 Mo/W)
     0:   (0.754334, 8.170971, 0.754334, 8.170971),
