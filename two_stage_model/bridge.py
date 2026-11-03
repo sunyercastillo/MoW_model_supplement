@@ -7,6 +7,7 @@ engine, stores them in Streamlit session state and renders the model section.
 """
 
 import os
+import hashlib
 
 import numpy as np
 import pandas as pd
@@ -36,8 +37,13 @@ def safe_float(value, default):
         return default
 
 
+def _digest(path):
+    with open(path, "rb") as fh:
+        return hashlib.md5(fh.read()).hexdigest()
+
+
 @st.cache_data
-def load_part1_source(_mtime: float):
+def load_part1_source(_digest: str):
     """First valid row of the 'Part1' sheet: D_bulk table at the engine's salinity grid and C0."""
     try:
         raw = load_excel(INPUT_XLSX, sheet="Part1")
@@ -59,7 +65,7 @@ def load_part1_source(_mtime: float):
 
 
 @st.cache_data
-def load_part2_segments(_mtime: float):
+def load_part2_segments(_digest: str):
     """Segments of the 'Part2_Segments' sheet, each with its own D_bulk table (engine at its T_K)."""
     try:
         raw = load_excel(INPUT_XLSX, sheet="Part2_Segments")
@@ -129,19 +135,18 @@ def load_part2_segments(_mtime: float):
 
 
 def render_two_stage_model():
-    try:
-        mtime = os.path.getmtime(INPUT_XLSX)
-    except OSError:
+    if not os.path.exists(INPUT_XLSX):
         st.error(f"Input workbook not found: {INPUT_XLSX}")
         return
-    results_df, comp = load_part1_source(mtime)
+    digest = _digest(INPUT_XLSX)
+    results_df, comp = load_part1_source(digest)
     if results_df is None:
         st.error("No valid source row in sheet 'Part1' of data/slab_segments.xlsx.")
         return
     st.session_state["bali_results_df"] = results_df
     st.session_state["bali_source_params"] = comp
     st.session_state["bali_selected_salinity"] = 10.0
-    st.session_state["p2_segments"] = load_part2_segments(mtime)
+    st.session_state["p2_segments"] = load_part2_segments(digest)
 
     st.markdown(
         "Evolution of Mo and δ⁹⁸/⁹⁵Mo in the slab fluid, in two stages. "

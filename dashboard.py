@@ -12,6 +12,7 @@ Run:  streamlit run dashboard.py   (or ./launch_dashboard.sh)
 
 import os
 import math
+import hashlib
 
 import pandas as pd
 import plotly.graph_objects as go
@@ -42,8 +43,14 @@ st.set_page_config(page_title="Mo–W systematics — forward models", layout="w
 # ──────────────────────────────────────────────────────────────────────────────
 # Data
 # ──────────────────────────────────────────────────────────────────────────────
+def file_digest(path):
+    """Content hash of an input workbook; used as cache key so edits are picked up on any host."""
+    with open(path, "rb") as fh:
+        return hashlib.md5(fh.read()).hexdigest()
+
+
 @st.cache_data
-def load_arc_data(_mtime):
+def load_arc_data(_digest):
     """ArcData sheet: one row per lava sample (SampleID, Arc, Mo_ppm, W_ppm, U_ppm, Th_ppm, Nb_ppm, La_ppm).
     Colours: ARC_STYLE for the two arcs of the paper, then rows of the Style sheet with KeyType = 'Arc',
     then a default palette."""
@@ -75,7 +82,7 @@ def load_arc_data(_mtime):
 
 
 @st.cache_resource
-def model(_mtime):
+def model(_digest):
     return Model()
 
 
@@ -169,9 +176,9 @@ def panel(column, fig, headers, cols, grid_rows, param_label, file_stub, key):
 st.title("Mo-W systematics of subduction-zone fluids")
 
 write_model_inputs_template()   # restores data/model_inputs.xlsx from the defaults if it was deleted
-m = model(os.path.getmtime(MODEL_INPUTS_XLSX))
+m = model(file_digest(MODEL_INPUTS_XLSX))
 c = m.c
-arc_mtime = os.path.getmtime(ARC_XLSX) if os.path.exists(ARC_XLSX) else 0
+arc_digest = file_digest(ARC_XLSX) if os.path.exists(ARC_XLSX) else None
 
 with st.expander("Mo-W Thermodynamic model", expanded=True):
     st.markdown(
@@ -185,7 +192,7 @@ with st.expander("Mo-W Thermodynamic model", expanded=True):
     )
     ctl1, ctl2, ctl3 = st.columns([1, 2, 1])
     show_data = ctl1.checkbox("Show lava data (Nicaragua, Costa Rica)", value=True)
-    arc_df, arc_styles = load_arc_data(arc_mtime) if (show_data and os.path.exists(ARC_XLSX)) else (None, None)
+    arc_df, arc_styles = load_arc_data(arc_digest) if (show_data and arc_digest) else (None, None)
     preset = ctl2.radio("Sediment end-member (panel C)",
                         ["Pure carbonate (100C:0H)", "60C:40H", "Pure hemipelagic (0C:100H)", "Custom"],
                         horizontal=True, index=0, key="sed_preset")
