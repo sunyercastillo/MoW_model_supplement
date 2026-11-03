@@ -1,12 +1,4 @@
-"""
-Mo/W–U/Th forward model of Bali et al. (2011, 2012): constants, equations and grid builders.
 
-This is the single source of truth for the supplementary material. The same
-definitions drive the Excel workbook (`build_workbook.py`), the DataGraph
-tables and the interactive dashboard (`dashboard.py`). Every constant appears
-once, in INPUTS; the `Model` class mirrors, line by line, the formulas written
-to the workbook.
-"""
 
 import os
 import math

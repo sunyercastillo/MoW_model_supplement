@@ -166,7 +166,7 @@ def panel(column, fig, headers, cols, grid_rows, param_label, file_stub, key):
 # ──────────────────────────────────────────────────────────────────────────────
 # Page
 # ──────────────────────────────────────────────────────────────────────────────
-st.title("Mo–W systematics of subduction-zone fluids — forward models")
+st.title("Mo-W systematics of subduction-zone fluids")
 
 write_model_inputs_template()   # restores data/model_inputs.xlsx from the defaults if it was deleted
 m = model(os.path.getmtime(MODEL_INPUTS_XLSX))
