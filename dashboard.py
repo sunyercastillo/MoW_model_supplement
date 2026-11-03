@@ -21,7 +21,7 @@ from thermodynamic_model.model import (Model, MODEL_INPUTS_XLSX, param_tag, dg_t
                                        write_model_inputs_template)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ARC_XLSX = os.path.join(HERE, "data", "arc_data.xlsx")
+ARC_XLSX = os.path.join(HERE, "data", "lava_data.xlsx")
 
 # Colours sampled from the published figure
 BAND_COLORS = ["#e3edf6", "#eef5fa", "#fafafa", "#fcede8", "#f9dbd5"]   # ΔFMQ −2→−1 … +2→+3

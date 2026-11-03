@@ -22,7 +22,7 @@ supplied as a separate supplementary file.
    sediment-buffered redox filter (Stage 2, α_r), tracking Mo and δ⁹⁸/⁹⁵Mo of the
    cumulative fluid.
 
-Both models draw the same lava data (Nicaragua, Costa Rica) from `data/arc_data.xlsx`.
+Both models draw the same lava data (Nicaragua, Costa Rica) from `data/lava_data.xlsx`.
 
 ## Repository layout
 
@@ -40,8 +40,8 @@ two_stage_model/
     lava_data.py              lava data overlay
 data/                         editable inputs (see "Changing inputs")
     model_inputs.xlsx         constants, end-members, grid axes
-    sample_input_data.xlsx    slab segments for the two-stage model
-    arc_data.xlsx             lava data and plotting styles
+    slab_segments.xlsx    slab segments for the two-stage model
+    lava_data.xlsx             lava data and plotting styles
 docs/audit_inputs_and_equations.md   equations, constants, and inconsistencies found in the sources
 .streamlit/config.toml        dashboard theme
 CITATION.cff · LICENSE (CC BY 4.0)
@@ -101,7 +101,7 @@ sediment list must contain 0.
 Delete `data/model_inputs.xlsx` to restore the published defaults; the
 dashboard recreates it on the next start.
 
-### Lava data — `data/arc_data.xlsx`
+### Lava data — `data/lava_data.xlsx`
 
 Sheet `ArcData`, one row per sample: `SampleID`, `Arc`, `Group`, `Mo_ppm`,
 `W_ppm`, `U_ppm`, `Th_ppm`, `Nb_ppm`, `La_ppm`, and for the two-stage model
@@ -112,7 +112,7 @@ article, other arcs take a `Style` row with `KeyType = Arc`, `Key = <Arc>`,
 rows with `KeyType = Group` sets the transparency of that group's samples in
 all plots (1 = opaque, 0.5 = half-transparent, as in the article).
 
-### Slab segments — `data/sample_input_data.xlsx`
+### Slab segments — `data/slab_segments.xlsx`
 
 Sheet `Part2_Segments`, one row per slab segment: `segment`, `P_bar`, `T_C`
 (`T_K` and `phi` are recomputed if Excel has not cached the formulas),

@@ -1047,7 +1047,7 @@ def render_fluid_fractionation_section(
                                            | ({custom_ar} if custom_ar else set())))
 
     # ── Lava data overlay ──
-    # Same lava data and colours as the Mo-W Thermodynamic model panels (data/arc_data.xlsx).
+    # Same lava data and colours as the Mo-W Thermodynamic model panels (data/lava_data.xlsx).
     arc_df, _style_file, _arc_errs = load_arc_data_from_file()
     _ARC_COL = {"Nicaragua": ("#fca9ff", "#9c329a"), "CostaRica": ("#93e65d", "#3a7a1e")}
     _rows = []
@@ -1129,7 +1129,7 @@ def render_fluid_fractionation_section(
         if isinstance(_ed, dict):
             _ed["edited_rows"] = {}
 
-    st.markdown("**Slab segment — sheet `Part2_Segments` of `data/sample_input_data.xlsx`**")
+    st.markdown("**Slab segment — sheet `Part2_Segments` of `data/slab_segments.xlsx`**")
     st.caption("Tick one row to select the segment used for the calculation. "
                "Edit or add rows in the workbook to model other segments.")
     st.data_editor(

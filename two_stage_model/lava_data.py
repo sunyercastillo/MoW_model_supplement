@@ -1,5 +1,5 @@
 """
-Lava data overlay: reads data/arc_data.xlsx (ArcData and Style sheets),
+Lava data overlay: reads data/lava_data.xlsx (ArcData and Style sheets),
 validates it, computes element ratios and draws the samples on Plotly figures.
 """
 
@@ -33,7 +33,7 @@ NUMERIC_COLUMNS = [
 ]
 
 # Default arc data filename
-ARC_DATA_FILENAME = 'arc_data.xlsx'
+ARC_DATA_FILENAME = 'lava_data.xlsx'
 
 
 # Data loading and validation
@@ -45,7 +45,7 @@ def load_arc_data_from_file(file_path: str = None) -> Tuple[Optional[pd.DataFram
     Parameters
     ----------
     file_path : str, optional
-        Path to Excel file. If None, looks for 'arc_data.xlsx' in the app directory.
+        Path to Excel file. If None, looks for 'lava_data.xlsx' in the app directory.
     
     Returns
     -------
@@ -428,7 +428,7 @@ def add_arc_overlay_to_figure(
         return fig
 
     # Required ratio columns must exist (compute_ratios normally creates them, but a
-    # malformed arc_data.xlsx may be missing the underlying concentrations) — skip
+    # malformed lava_data.xlsx may be missing the underlying concentrations) — skip
     # the overlay gracefully rather than raising KeyError downstream.
     if x_col not in arc_df.columns or y_col not in arc_df.columns:
         return fig

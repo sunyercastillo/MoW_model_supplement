@@ -1,7 +1,7 @@
 """
 Entry point of the two-stage fractionation model for the dashboard.
 
-Reads the slab segments and the reference source from data/sample_input_data.xlsx,
+Reads the slab segments and the reference source from data/slab_segments.xlsx,
 computes each segment's bulk partition coefficients with the partitioning
 engine, stores them in Streamlit session state and renders the model section.
 """
@@ -18,8 +18,8 @@ from .fractionation import render_fluid_fractionation_section
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # repository root
 DATA_DIR = os.path.join(ROOT, "data")
-INPUT_XLSX = os.path.join(DATA_DIR, "sample_input_data.xlsx")
-ARC_XLSX = os.path.join(DATA_DIR, "arc_data.xlsx")
+INPUT_XLSX = os.path.join(DATA_DIR, "slab_segments.xlsx")
+ARC_XLSX = os.path.join(DATA_DIR, "lava_data.xlsx")
 
 # lava_data looks for the workbook next to itself by default; use data/ instead
 lava_data.ARC_DATA_FILENAME = ARC_XLSX
@@ -136,7 +136,7 @@ def render_two_stage_model():
         return
     results_df, comp = load_part1_source(mtime)
     if results_df is None:
-        st.error("No valid source row in sheet 'Part1' of data/sample_input_data.xlsx.")
+        st.error("No valid source row in sheet 'Part1' of data/slab_segments.xlsx.")
         return
     st.session_state["bali_results_df"] = results_df
     st.session_state["bali_source_params"] = comp
@@ -154,7 +154,7 @@ def render_two_stage_model():
         "with the reduction fractionation factor α_r. Solid curves use the unmodified N-MORB protolith, dashed "
         "curves the sediment-modified protolith set with the sliders. "
         "Segment conditions (P, T, ΔFMQ, ΔFMQ_filter, modes, C₀, δ⁹⁸/⁹⁵Mo) are read from the sheet "
-        "`Part2_Segments` of `data/sample_input_data.xlsx`; lava data from `data/arc_data.xlsx`."
+        "`Part2_Segments` of `data/slab_segments.xlsx`; lava data from `data/lava_data.xlsx`."
     )
 
     render_fluid_fractionation_section()
