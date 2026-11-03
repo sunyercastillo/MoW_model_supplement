@@ -1,12 +1,10 @@
-# Mo–W systematics of subduction-zone fluids — forward models
+# Mo–W systematics of subduction-zone fluids
 
 Supplementary material to *<Article title>* (Geochimica et Cosmochimica Acta,
 2026): the two forward models used in the article as an interactive dashboard
-that can be run with other inputs. The Excel workbook reproducing the
-sensitivity grids cell by cell, and the DataGraph tables of the figure, are
-supplied as a separate supplementary file.
+that can be run with other inputs.
 
-**Live dashboard (no installation):** `<Streamlit Community Cloud URL>`
+**Live dashboard (no installation):** https://mow-systematics.streamlit.app/
 
 ## The two models
 
